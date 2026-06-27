@@ -1,0 +1,11 @@
+flask
+flask-cors
+pymysql
+sqlalchemy
+pika
+langchain
+langchain-openai
+openai
+python-dotenv
+gunicorn
+cryptography
