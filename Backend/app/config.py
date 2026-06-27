@@ -29,9 +29,11 @@ LABELHUB_MINIO_PUBLIC_URL = os.environ.get(
     "LABELHUB_MINIO_PUBLIC_URL", "http://localhost:9000"
 )
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "buyunaihe-dev-secret-change-me")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
 JWT_ALG = "HS256"
 JWT_TTL_HOURS = 24
+
+APP_ADMIN_PASSWORD = os.environ.get("APP_ADMIN_PASSWORD", "")
 
 AGENT_WEB_URL = os.environ.get("AGENT_WEB_URL", "http://localhost:5001")
 

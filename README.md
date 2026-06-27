@@ -131,10 +131,13 @@ AI_AUDIT_BASE_URL=
 AI_AUDIT_API_KEY=
 AI_AUDIT_MODEL=gpt-4o-mini
 
-MYSQL_ROOT_PASSWORD=labelhub123
-MINIO_ROOT_PASSWORD=labelhub123
+# 必填：请设置强密码，留空会导致中间件无法启动
+MYSQL_ROOT_PASSWORD=
+MYSQL_PASSWORD=
+RABBITMQ_PASSWORD=
+MINIO_ROOT_PASSWORD=
+JWT_SECRET=
 LABELHUB_MINIO_PUBLIC_URL=http://localhost:9000
-JWT_SECRET=buyunaihe-dev-secret-change-me
 ```
 
 ### 默认访问地址
@@ -152,13 +155,20 @@ JWT_SECRET=buyunaihe-dev-secret-change-me
 
 ---
 
-## 默认账号
+## 初始账号
 
-| 用户名 | 密码 | 角色 |
-| --- | --- | --- |
-| `admin` | `123456` | owner（管理员） |
-| `labeler1` | `123456` | labeler（标注员） |
-| `reviewer1` | `123456` | reviewer（审核员） |
+首次启动时，后端会自动创建初始管理员账号。初始密码来源：
+
+- **若在 `deploy/docker.env` 设置了 `APP_ADMIN_PASSWORD`**：三个初始账号（`admin`/`labeler1`/`reviewer1`）均使用该密码。
+- **若未设置（留空）**：后端自动生成随机密码，并打印到 backend 启动日志中，查找类似 `Generated initial passwords` 的行即可获取。**请登录后立即在「用户管理」修改密码。**
+
+| 用户名 | 角色 |
+| --- | --- |
+| `admin` | owner（管理员） |
+| `labeler1` | labeler（标注员） |
+| `reviewer1` | reviewer（审核员） |
+
+> 出于安全考虑，本仓库不内置任何默认明文密码。请通过环境变量或日志获取初始密码后及时修改。
 
 ---
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -33,24 +34,31 @@ logger = logging.getLogger("buyunaihe")
 def _seed_defaults():
     db = SessionLocal()
     try:
+        admin_pw = config.APP_ADMIN_PASSWORD or secrets.token_urlsafe(12)
         defaults = [
-            ("admin", "管理员", "owner"),
-            ("labeler1", "标注员甲", "labeler"),
-            ("reviewer1", "审核员甲", "reviewer"),
+            ("admin", "管理员", "owner", admin_pw),
+            ("labeler1", "标注员甲", "labeler", config.APP_ADMIN_PASSWORD or "labeler123"),
+            ("reviewer1", "审核员甲", "reviewer", config.APP_ADMIN_PASSWORD or "reviewer123"),
         ]
-        for username, nickname, role in defaults:
+        for username, nickname, role, password in defaults:
             u = db.query(User).filter(User.username == username).first()
             if u is None:
                 db.add(User(
                     username=username,
-                    password_hash=hash_password("123456"),
+                    password_hash=hash_password(password),
                     nickname=nickname,
                     role_code=role,
                     status="active",
                 ))
             elif not u.password_hash or u.password_hash == "":
-                u.password_hash = hash_password("123456")
+                u.password_hash = hash_password(password)
         db.commit()
+        if not config.APP_ADMIN_PASSWORD:
+            logger.warning(
+                "APP_ADMIN_PASSWORD not set. Generated initial passwords — "
+                "login and change them immediately: admin=%s labeler1=labeler123 reviewer1=reviewer123",
+                admin_pw,
+            )
     finally:
         db.close()
 
@@ -58,6 +66,9 @@ def _seed_defaults():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Buyunaihe backend starting up")
+    if not config.JWT_SECRET:
+        logger.error("JWT_SECRET is not set. Configure it in deploy/docker.env and restart.")
+        raise RuntimeError("JWT_SECRET is required")
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
