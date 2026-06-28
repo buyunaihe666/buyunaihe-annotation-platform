@@ -32,3 +32,7 @@ export function publishTemplate(id: number) {
 export function archiveTemplate(id: number) {
   return http.post<any, Template>(`/templates/${id}/archive`)
 }
+
+export function batchDeleteTemplates(ids: number[]) {
+  return http.post<any, { deleted: number }>('/templates/batch-delete', { ids })
+}

@@ -39,9 +39,11 @@ export const TASK_ITEM_STATUS: Record<
 }
 
 export const MATERIAL_TYPES: { value: MaterialType; label: string; icon: string }[] = [
+  { value: 'text_display', label: '文本展示', icon: 'Document' },
   { value: 'text', label: '单行文本', icon: 'EditPen' },
   { value: 'textarea', label: '多行文本', icon: 'Document' },
   { value: 'number', label: '数字', icon: 'Histogram' },
+  { value: 'rating', label: '评分', icon: 'Star' },
   { value: 'radio', label: '单选', icon: 'Select' },
   { value: 'checkbox', label: '多选', icon: 'Finished' },
   { value: 'select', label: '下拉选择', icon: 'ArrowDown' },

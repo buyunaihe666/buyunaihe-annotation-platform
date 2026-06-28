@@ -1,8 +1,10 @@
 import { http } from '.'
 import type { Dataset, DatasetItemsPage } from '@/types'
 
-export function listDatasets() {
-  return http.get<any, Dataset[]>('/datasets')
+export function listDatasets(search?: string) {
+  return http.get<any, Dataset[]>('/datasets', {
+    params: search ? { search } : undefined
+  })
 }
 
 export function createDataset(payload: { name: string; description?: string }) {
@@ -15,6 +17,10 @@ export function getDataset(id: number) {
 
 export function deleteDataset(id: number) {
   return http.delete(`/datasets/${id}`)
+}
+
+export function batchDeleteDatasets(ids: number[]) {
+  return http.post<any, { deleted: number }>('/datasets/batch-delete', { ids })
 }
 
 export function uploadDatasetFile(id: number, file: File) {

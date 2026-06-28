@@ -5,6 +5,7 @@ import io
 import json
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -95,8 +96,11 @@ def parse_rows(data: bytes, fmt: str) -> list[dict]:
 
 
 @router.get("")
-def list_datasets(db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin", "labeler", "reviewer"))):
-    rows = db.query(Dataset).order_by(Dataset.id.desc()).all()
+def list_datasets(search: str | None = Query(default=None), db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin", "labeler", "reviewer"))):
+    q = db.query(Dataset)
+    if search:
+        q = q.filter(Dataset.name.ilike(f"%{search}%"))
+    rows = q.order_by(Dataset.id.desc()).all()
     return ok([_out(d) for d in rows])
 
 
@@ -115,6 +119,25 @@ def get_dataset(dataset_id: int, db: Session = Depends(get_db), _user: User = De
     if d is None:
         raise HTTPException(status_code=404, detail={"code": 404, "message": "dataset not found", "data": None})
     return ok(_out(d))
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_datasets(body: BatchDeleteRequest, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin"))):
+    deleted = 0
+    for did in body.ids:
+        d = db.query(Dataset).filter(Dataset.id == did).first()
+        if d is None:
+            continue
+        db.query(DatasetItem).filter(DatasetItem.dataset_id == did).delete()
+        db.query(DatasetFile).filter(DatasetFile.dataset_id == did).delete()
+        db.delete(d)
+        deleted += 1
+    db.commit()
+    return ok({"deleted": deleted})
 
 
 @router.delete("/{dataset_id}")

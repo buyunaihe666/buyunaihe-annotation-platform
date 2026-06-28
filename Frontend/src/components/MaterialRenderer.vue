@@ -119,9 +119,11 @@ defineExpose({ validate, reset, sync })
       :label="m.label + (m.required ? ' *' : '')"
       :prop="m.fieldKey"
     >
-      <el-input v-if="m.type === 'text'" v-model="local[m.fieldKey]" :placeholder="`请输入${m.label}`" @input="onInput" />
+      <div v-if="m.type === 'text_display'" class="text-display-box">{{ local[m.fieldKey] ?? '—' }}</div>
+      <el-input v-else-if="m.type === 'text'" v-model="local[m.fieldKey]" :placeholder="`请输入${m.label}`" @input="onInput" />
       <el-input v-else-if="m.type === 'textarea'" v-model="local[m.fieldKey]" type="textarea" :rows="m.props?.rows || 4" :placeholder="`请输入${m.label}`" @input="onInput" />
       <el-input-number v-else-if="m.type === 'number'" v-model="local[m.fieldKey]" :min="m.props?.min" :max="m.props?.max" :step="m.props?.step || 1" controls-position="right" @change="onInput" />
+      <el-rate v-else-if="m.type === 'rating'" v-model="local[m.fieldKey]" :max="m.props?.max || 5" @change="onInput" />
       <el-radio-group v-else-if="m.type === 'radio'" v-model="local[m.fieldKey]" @change="onInput">
         <el-radio v-for="opt in m.options || []" :key="opt" :value="opt">{{ opt }}</el-radio>
       </el-radio-group>
@@ -149,6 +151,7 @@ defineExpose({ validate, reset, sync })
 
 <style scoped lang="scss">
 .material-form :deep(.el-form-item__label) { font-weight: 500; color: #1f2430; }
+.text-display-box { padding: 10px 14px; background: #f5f7fa; border-radius: 6px; color: #333; line-height: 1.6; min-height: 40px; word-break: break-all; }
 .img-placeholder { width: 140px; height: 140px; border: 1px dashed #c0c4cc; border-radius: 8px; display:flex; align-items:center; justify-content:center; color: #909399; font-size:13px; }
 .llm-prompt-box .el-alert { margin-bottom: 8px; }
 </style>

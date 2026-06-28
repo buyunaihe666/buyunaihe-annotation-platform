@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -91,3 +92,22 @@ def delete_user(user_id: int, db: Session = Depends(get_db), cur: User = Depends
     db.delete(u)
     db.commit()
     return ok({})
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_users(body: BatchDeleteRequest, db: Session = Depends(get_db), cur: User = Depends(require_role("owner", "admin"))):
+    deleted = 0
+    for user_id in body.ids:
+        if cur.id == user_id:
+            continue
+        u = db.query(User).filter(User.id == user_id).first()
+        if u is None:
+            continue
+        db.delete(u)
+        deleted += 1
+    db.commit()
+    return ok({"deleted": deleted})

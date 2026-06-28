@@ -39,6 +39,20 @@ def _connect():
 
 
 def verify_connection() -> bool:
+    # Quick socket check first to avoid slow pika retries
+    try:
+        import socket
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.5)
+        if s.connect_ex((config.RABBITMQ_HOST, config.RABBITMQ_PORT)) != 0:
+            s.close()
+            logger.warning(f"[rabbitmq] not reachable at {config.RABBITMQ_HOST}:{config.RABBITMQ_PORT}")
+            return False
+        s.close()
+    except Exception as e:
+        logger.warning(f"[rabbitmq] socket probe failed: {e}")
+        return False
     try:
         _connect()
         return True

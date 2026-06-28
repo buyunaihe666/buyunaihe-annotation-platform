@@ -47,6 +47,7 @@ function initProps(type: MaterialType): Record<string, any> {
     case 'textarea': return { rows: 4 }
     case 'select': return { multiple: false }
     case 'number': return { min: undefined, max: undefined, step: 1 }
+    case 'rating': return { max: 5 }
     default: return {}
   }
 }
@@ -259,6 +260,9 @@ watch(materials, () => { if (!selectedId.value && materials.value[0]) selectedId
             </el-form-item>
             <el-form-item v-if="selected.type === 'number'" label="最大值">
               <el-input-number v-model="selected.props!.max" controls-position="right" />
+            </el-form-item>
+            <el-form-item v-if="selected.type === 'rating'" label="最大分值">
+              <el-input-number v-model="selected.props!.max" :min="1" :max="10" controls-position="right" />
             </el-form-item>
           </el-form>
         </el-card>

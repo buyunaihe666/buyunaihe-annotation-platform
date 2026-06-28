@@ -36,3 +36,19 @@ deploy/test_data/
 
 # Docker prebuilt
 Frontend/Dockerfile.prebuilt
+
+# Database & local storage
+Backend/labelhub.db
+Backend/.local_files/
+
+# Downloaded / generated datasets
+real_dataset/
+real_clue/
+real_test_dataset.json
+test_dataset.json
+test_dataset_*.json
+
+# Test scripts (root level)
+test_*.py
+test_*.ps1
+check_*.py

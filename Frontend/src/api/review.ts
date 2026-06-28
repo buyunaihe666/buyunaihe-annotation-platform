@@ -33,3 +33,10 @@ export function submitDecision(
     comment
   })
 }
+
+export function submitModifyAndPass(
+  itemId: number,
+  body: { decision: string; comment: string }
+) {
+  return http.post<any, any>(`/review/items/${itemId}/modify-and-pass`, body)
+}

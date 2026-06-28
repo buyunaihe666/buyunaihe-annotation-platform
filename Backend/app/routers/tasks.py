@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -12,6 +13,8 @@ from ..models import (
     TaskProgress,
     TaskTransition,
     DatasetItem,
+    AnnotationResult,
+    Template,
     User,
 )
 from ..response import ok
@@ -41,6 +44,13 @@ def _out(t: Task) -> dict:
         "status": t.status,
         "enable_ai_audit": t.enable_ai_audit,
         "enable_ai_suggestion": t.enable_ai_suggestion,
+        "quota": t.quota,
+        "max_item_count": t.max_item_count,
+        "deadline": t.deadline.isoformat() if t.deadline else None,
+        "reward_rules": t.reward_rules,
+        "tags": t.tags,
+        "distribution_type": t.distribution_type,
+        "ai_audit_config": t.ai_audit_config,
         "created_by": t.created_by,
         "created_at": t.created_at,
     }
@@ -91,6 +101,12 @@ def list_tasks(
 
 @router.post("")
 def create_task(body: TaskCreate, db: Session = Depends(get_db), user: User = Depends(require_role("owner", "admin"))):
+    # 确定数据集总量
+    max_count = 0
+    if body.dataset_id:
+        ds = db.query(DatasetItem).filter(DatasetItem.dataset_id == body.dataset_id).count()
+        max_count = ds
+
     t = Task(
         name=body.name,
         description=body.description,
@@ -98,6 +114,13 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db), user: User = De
         dataset_id=body.dataset_id,
         enable_ai_audit=1 if body.enable_ai_audit else 0,
         enable_ai_suggestion=1 if body.enable_ai_suggestion else 0,
+        quota=body.quota if body.quota is not None else max_count,
+        max_item_count=max_count,
+        deadline=body.deadline,
+        reward_rules=body.reward_rules,
+        tags=body.tags,
+        distribution_type=body.distribution_type or "first_come_first_serve",
+        ai_audit_config=body.ai_audit_config,
         created_by=user.id,
     )
     db.add(t)
@@ -132,9 +155,42 @@ def update_task(task_id: int, body: TaskUpdate, db: Session = Depends(get_db), _
         t.enable_ai_audit = 1 if body.enable_ai_audit else 0
     if body.enable_ai_suggestion is not None:
         t.enable_ai_suggestion = 1 if body.enable_ai_suggestion else 0
+    if body.quota is not None:
+        t.quota = body.quota
+    if body.deadline is not None:
+        t.deadline = body.deadline
+    if body.reward_rules is not None:
+        t.reward_rules = body.reward_rules
+    if body.tags is not None:
+        t.tags = body.tags
+    if body.distribution_type is not None:
+        t.distribution_type = body.distribution_type
+    if body.ai_audit_config is not None:
+        t.ai_audit_config = body.ai_audit_config
     db.commit()
     db.refresh(t)
     return ok(_out(t))
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_tasks(body: BatchDeleteRequest, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin"))):
+    deleted = 0
+    for tid in body.ids:
+        t = db.query(Task).filter(Task.id == tid).first()
+        if t is None:
+            continue
+        db.query(TaskItem).filter(TaskItem.task_id == tid).delete()
+        db.query(TaskAssignment).filter(TaskAssignment.task_id == tid).delete()
+        db.query(TaskTransition).filter(TaskTransition.task_id == tid).delete()
+        db.query(TaskProgress).filter(TaskProgress.task_id == tid).delete()
+        db.delete(t)
+        deleted += 1
+    db.commit()
+    return ok({"deleted": deleted})
 
 
 @router.delete("/{task_id}")
@@ -168,6 +224,18 @@ def publish_task(task_id: int, db: Session = Depends(get_db), _user: User = Depe
         )
         for i, it in enumerate(items):
             db.add(TaskItem(task_id=task_id, dataset_item_id=it.id, index=i, status="pending"))
+        db.flush()  # ensure new items have IDs
+        # Apply existing reviewer assignments to the newly created items
+        reviewer_assignments = (
+            db.query(TaskAssignment)
+            .filter(TaskAssignment.task_id == task_id, TaskAssignment.role == "reviewer")
+            .all()
+        )
+        if reviewer_assignments:
+            new_items = db.query(TaskItem).filter(TaskItem.task_id == task_id).all()
+            for it in new_items:
+                if it.assigned_reviewer_id is None:
+                    it.assigned_reviewer_id = reviewer_assignments[0].user_id
     t.status = "published"
     db.commit()
     recompute_progress(db, task_id)
@@ -224,13 +292,16 @@ def assign_task(
         )
         if existing:
             continue
-        db.add(TaskAssignment(task_id=task_id, user_id=a.user_id, role=a.role))
+        db.add(TaskAssignment(task_id=task_id, user_id=a.user_id, role=a.role, review_order=a.review_order))
         if a.role == "reviewer":
+            # 审核链路：设置首个审核员为当前审核员
             items = db.query(TaskItem).filter(
                 TaskItem.task_id == task_id, TaskItem.assigned_reviewer_id.is_(None)
             ).all()
             for it in items:
                 it.assigned_reviewer_id = a.user_id
+                if it.current_reviewer_id is None:
+                    it.current_reviewer_id = a.user_id
     db.commit()
     return ok({})
 
@@ -297,8 +368,6 @@ def _task_item_detail(db: Session, task_id: int, item_id: int) -> dict:
     task = db.query(Task).filter(Task.id == task_id).first()
     schema_json = None
     if task and task.template_id:
-        from ..models import Template
-
         tpl = db.query(Template).filter(Template.id == task.template_id).first()
         if tpl:
             schema_json = tpl.schema_json
@@ -307,8 +376,6 @@ def _task_item_detail(db: Session, task_id: int, item_id: int) -> dict:
         di = db.query(DatasetItem).filter(DatasetItem.id == item.dataset_item_id).first()
         if di:
             raw_data = di.raw_data
-    from ..models import AnnotationResult
-
     result_row = (
         db.query(AnnotationResult)
         .filter(AnnotationResult.task_item_id == item_id)

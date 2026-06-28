@@ -28,3 +28,7 @@ export function updateUser(id: number, payload: Partial<User>) {
 export function deleteUser(id: number) {
   return http.delete(`/users/${id}`)
 }
+
+export function batchDeleteUsers(ids: number[]) {
+  return http.post<any, { deleted: number }>('/users/batch-delete', { ids })
+}

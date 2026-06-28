@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -119,3 +120,20 @@ def archive_template(template_id: int, db: Session = Depends(get_db), _user: Use
     db.commit()
     db.refresh(t)
     return ok(_out(t))
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int]
+
+
+@router.post("/batch-delete")
+def batch_delete_templates(body: BatchDeleteRequest, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin"))):
+    deleted = 0
+    for template_id in body.ids:
+        t = db.query(Template).filter(Template.id == template_id).first()
+        if t is None:
+            continue
+        db.delete(t)
+        deleted += 1
+    db.commit()
+    return ok({"deleted": deleted})

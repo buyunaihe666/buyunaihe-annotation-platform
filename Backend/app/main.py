@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import config, minio_client, rabbitmq
@@ -65,10 +66,9 @@ def _seed_defaults():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Buyunaihe backend starting up")
-    if not config.JWT_SECRET:
-        logger.error("JWT_SECRET is not set. Configure it in deploy/docker.env and restart.")
-        raise RuntimeError("JWT_SECRET is required")
+    logger.info("Buyunaihe backend starting up (db=%s)", config.database_url())
+    if config.database_url().startswith("sqlite"):
+        logger.warning("[auth] Using SQLite + dev JWT secret — configure PostgreSQL & JWT_SECRET for production")
     try:
         Base.metadata.create_all(bind=engine)
     except Exception as e:
@@ -132,6 +132,19 @@ async def unhandled_exc_handler(request: Request, exc: Exception):
 @app.get("/health")
 def health():
     return {"code": 0, "message": "ok", "data": {"status": "ok"}}
+
+
+@app.get("/local-files/{path:path}")
+def serve_local_file(path: str):
+    """Serve files from local filesystem storage (fallback when MinIO unavailable)."""
+    full = os.path.join(config.LOCAL_STORAGE_DIR, path)
+    # Prevent path traversal
+    base = os.path.abspath(config.LOCAL_STORAGE_DIR)
+    if not os.path.abspath(full).startswith(base):
+        return JSONResponse(status_code=403, content={"code": 403, "message": "forbidden", "data": None})
+    if not os.path.isfile(full):
+        return JSONResponse(status_code=404, content={"code": 404, "message": "file not found", "data": None})
+    return FileResponse(full)
 
 
 app.include_router(auth.router)

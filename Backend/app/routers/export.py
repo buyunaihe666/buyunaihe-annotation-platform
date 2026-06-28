@@ -3,16 +3,18 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 from datetime import datetime
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from .. import config
 from ..database import get_db
 from ..deps import require_role
-from ..minio_client import public_url, upload_bytes
+from ..minio_client import download_bytes, local_file_path, public_url, upload_bytes
 from ..models import (
     AnnotationResult,
     DatasetItem,
@@ -24,6 +26,9 @@ from ..models import (
 )
 from ..response import ok
 from ..schemas import ExportRequest
+
+class BatchDeleteIds(BaseModel):
+    ids: list[int]
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -154,6 +159,25 @@ def create_export(body: ExportRequest, db: Session = Depends(get_db), user: User
 
     rows = _collect_rows(db, task.id)
     rec.total = len(rows)
+
+    # 字段过滤
+    selected_fields = body.fields
+    if selected_fields:
+        filtered = []
+        for r in rows:
+            nr = {}
+            for k, v in r.items():
+                if k in ("task_item_id", "index", "status"):
+                    nr[k] = v
+                elif k == "raw_data" and isinstance(v, dict):
+                    nr[f"raw"] = {fk: fv for fk, fv in v.items() if fk in selected_fields}
+                elif k == "annotation_result" and isinstance(v, dict):
+                    nr["result"] = {fk: fv for fk, fv in v.items() if fk in selected_fields}
+                else:
+                    nr[k] = v
+            filtered.append(nr)
+        rows = filtered
+
     try:
         content, content_type = _build_content(rows, body.format)
         ext = {"json": "json", "jsonl": "jsonl", "csv": "csv", "xlsx": "xlsx"}[body.format]
@@ -225,4 +249,76 @@ def download_export(export_id: int, db: Session = Depends(get_db), _user: User =
     f = db.query(ExportFile).filter(ExportFile.export_record_id == r.id).order_by(ExportFile.id.desc()).first()
     if f is None:
         raise HTTPException(status_code=404, detail={"code": 404, "message": "no file", "data": None})
+
+    # 本地文件系统：直接返回文件流
+    local_path = local_file_path(f.minio_object)
+    if local_path:
+        return FileResponse(
+            path=local_path,
+            filename=f.filename,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{f.filename}"'},
+        )
+
+    # MinIO 或外部 URL：重定向
     return RedirectResponse(url=f.url or public_url("export", f.minio_object))
+
+
+@router.get("/{export_id}/content")
+def preview_export_content(export_id: int, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin", "reviewer"))):
+    """Return file content as plain text for online preview."""
+    r = db.query(ExportRecord).filter(ExportRecord.id == export_id).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "export not found", "data": None})
+    f = db.query(ExportFile).filter(ExportFile.export_record_id == r.id).order_by(ExportFile.id.desc()).first()
+    if f is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "no file", "data": None})
+
+    try:
+        local_path = local_file_path(f.minio_object)
+        if local_path:
+            with open(local_path, "rb") as fh:
+                raw = fh.read()
+        else:
+            raw = download_bytes("export", f.minio_object)
+
+        # Try UTF-8 first, fallback to detecting encoding
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("utf-8-sig", errors="replace")
+
+        return Response(content=text, media_type="text/plain; charset=utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"code": 500, "message": f"read failed: {e}", "data": None})
+
+
+@router.delete("/{export_id}")
+def delete_export(export_id: int, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin"))):
+    r = db.query(ExportRecord).filter(ExportRecord.id == export_id).first()
+    if r is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "export not found", "data": None})
+    db.query(ExportFile).filter(ExportFile.export_record_id == export_id).delete()
+    # Clean up local files
+    for ef in db.query(ExportFile).filter(ExportFile.export_record_id == export_id).all():
+        local = local_file_path(ef.minio_object)
+        if local:
+            try: os.remove(local)
+            except: pass
+    db.delete(r)
+    db.commit()
+    return ok({})
+
+
+@router.post("/batch-delete")
+def batch_delete_exports(body: BatchDeleteIds, db: Session = Depends(get_db), _user: User = Depends(require_role("owner", "admin"))):
+    deleted = 0
+    for eid in body.ids:
+        r = db.query(ExportRecord).filter(ExportRecord.id == eid).first()
+        if r is None:
+            continue
+        db.query(ExportFile).filter(ExportFile.export_record_id == eid).delete()
+        db.delete(r)
+        deleted += 1
+    db.commit()
+    return ok({"deleted": deleted})

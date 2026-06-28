@@ -9,7 +9,7 @@ from ..minio_client import public_url, upload_bytes
 from ..models import User
 from ..response import ok
 
-router = APIRouter(prefix="/upload", tags=["upload"])
+router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 
 @router.post("")

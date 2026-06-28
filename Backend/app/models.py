@@ -16,10 +16,14 @@ from sqlalchemy.orm import relationship
 
 from .database import Base
 
+# Cross-database primary key type: BigInteger on PostgreSQL/MySQL,
+# Integer on SQLite (SQLite only auto-increments INTEGER PRIMARY KEY).
+PK = BigInteger().with_variant(Integer, "sqlite")
+
 
 class Role(Base):
     __tablename__ = "roles"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     code = Column(String(32), nullable=False, unique=True)
     name = Column(String(64), nullable=False)
     description = Column(String(255))
@@ -28,7 +32,7 @@ class Role(Base):
 
 class Permission(Base):
     __tablename__ = "permissions"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     code = Column(String(64), nullable=False, unique=True)
     name = Column(String(128), nullable=False)
     module = Column(String(64), nullable=False)
@@ -37,13 +41,13 @@ class Permission(Base):
 
 class RolePermission(Base):
     __tablename__ = "role_permissions"
-    role_id = Column(BigInteger, primary_key=True)
-    permission_id = Column(BigInteger, primary_key=True)
+    role_id = Column(PK, primary_key=True)
+    permission_id = Column(PK, primary_key=True)
 
 
 class User(Base):
     __tablename__ = "users"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     username = Column(String(64), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
     nickname = Column(String(64))
@@ -62,7 +66,7 @@ class User(Base):
 
 class Template(Base):
     __tablename__ = "templates"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     name = Column(String(128), nullable=False)
     description = Column(String(512))
     status = Column(String(16), nullable=False, default="draft")
@@ -78,7 +82,7 @@ class Template(Base):
 
 class Dataset(Base):
     __tablename__ = "datasets"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     name = Column(String(128), nullable=False)
     description = Column(String(512))
     format = Column(String(16))
@@ -97,7 +101,7 @@ class Dataset(Base):
 
 class DatasetFile(Base):
     __tablename__ = "dataset_files"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     dataset_id = Column(BigInteger, nullable=False)
     filename = Column(String(255), nullable=False)
     minio_object = Column(String(512), nullable=False)
@@ -109,7 +113,7 @@ class DatasetFile(Base):
 
 class DatasetItem(Base):
     __tablename__ = "dataset_items"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     dataset_id = Column(BigInteger, nullable=False)
     file_id = Column(BigInteger)
     index = Column(Integer, nullable=False, default=0)
@@ -121,7 +125,7 @@ class DatasetItem(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     name = Column(String(128), nullable=False)
     description = Column(String(512))
     template_id = Column(BigInteger)
@@ -129,6 +133,20 @@ class Task(Base):
     status = Column(String(24), nullable=False, default="draft")
     enable_ai_audit = Column(Integer, nullable=False, default=1)
     enable_ai_suggestion = Column(Integer, nullable=False, default=1)
+
+    # --- 资源配置 ---
+    quota = Column(Integer, nullable=False, default=0)  # 任务配额（最大不能超过数据集总量）
+    max_item_count = Column(Integer, nullable=False, default=0)  # 数据集总量
+    deadline = Column(DateTime)  # 截止时间
+    reward_rules = Column(JSON)  # 奖励规则 {"per_item": 0.5, "bonus_approved": 1.0}
+
+    # --- 分类与分发配置 ---
+    tags = Column(JSON)  # 标签列表 ["文本","情感"]
+    distribution_type = Column(String(24), nullable=False, default="first_come_first_serve")  # first_come_first_serve | assigned
+
+    # --- AI 预审配置 ---
+    ai_audit_config = Column(JSON)  # {"audit_prompt": "...", "pass_score": 80, "review_score": 60, "dimensions": [{"name":"准确性","weight":0.5},{"name":"完整性","weight":0.3},{"name":"一致性","weight":0.2}]}
+
     created_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.current_timestamp())
     updated_at = Column(
@@ -140,22 +158,24 @@ class Task(Base):
 
 class TaskAssignment(Base):
     __tablename__ = "task_assignments"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     user_id = Column(BigInteger, nullable=False)
     role = Column(String(16), nullable=False)
+    review_order = Column(Integer, default=0)  # 审核链路顺序（0=非审核员, 1+=审核链路位置）
     assigned_at = Column(DateTime, server_default=func.current_timestamp())
 
 
 class TaskItem(Base):
     __tablename__ = "task_items"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     dataset_item_id = Column(BigInteger)
     index = Column(Integer, nullable=False, default=0)
     status = Column(String(24), nullable=False, default="pending")
     assigned_labeler_id = Column(BigInteger)
     assigned_reviewer_id = Column(BigInteger)
+    current_reviewer_id = Column(BigInteger)  # 当前在审核链中的审核员
     created_at = Column(DateTime, server_default=func.current_timestamp())
     updated_at = Column(
         DateTime,
@@ -166,7 +186,7 @@ class TaskItem(Base):
 
 class TaskTransition(Base):
     __tablename__ = "task_transitions"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     task_item_id = Column(BigInteger, nullable=False)
     from_status = Column(String(24))
@@ -179,7 +199,7 @@ class TaskTransition(Base):
 
 class TaskProgress(Base):
     __tablename__ = "task_progress"
-    task_id = Column(BigInteger, primary_key=True)
+    task_id = Column(PK, primary_key=True)
     total = Column(Integer, nullable=False, default=0)
     pending = Column(Integer, nullable=False, default=0)
     annotating = Column(Integer, nullable=False, default=0)
@@ -198,7 +218,7 @@ class TaskProgress(Base):
 
 class AnnotationResult(Base):
     __tablename__ = "annotation_results"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     task_item_id = Column(BigInteger, nullable=False, unique=True)
     labeler_id = Column(BigInteger, nullable=False)
@@ -217,7 +237,7 @@ class AnnotationResult(Base):
 
 class ReviewOpinion(Base):
     __tablename__ = "review_opinions"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     task_item_id = Column(BigInteger, nullable=False)
     reviewer_id = Column(BigInteger, nullable=False)
@@ -229,7 +249,7 @@ class ReviewOpinion(Base):
 
 class ExportRecord(Base):
     __tablename__ = "export_records"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     task_id = Column(BigInteger, nullable=False)
     format = Column(String(16), nullable=False)
     status = Column(String(16), nullable=False, default="pending")
@@ -241,7 +261,7 @@ class ExportRecord(Base):
 
 class ExportFile(Base):
     __tablename__ = "export_files"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(PK, primary_key=True, autoincrement=True)
     export_record_id = Column(BigInteger, nullable=False)
     minio_object = Column(String(512), nullable=False)
     filename = Column(String(255), nullable=False)

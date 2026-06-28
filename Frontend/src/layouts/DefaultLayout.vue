@@ -53,15 +53,16 @@ async function handleLogout() {
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <el-icon :size="22"><Tools /></el-icon>
-        <span>Buyunaihe</span>
+        <el-icon :size="26" color="#6366f1"><Tools /></el-icon>
+        <span>不予奈何</span>
       </div>
       <el-menu
         :default-active="activeMenu"
         class="side-menu"
-        background-color="#1f2430"
-        text-color="#c7ccd6"
-        active-text-color="#ffffff"
+        :ellipsis="false"
+        background-color="#ffffff"
+        text-color="#64748b"
+        active-text-color="#6366f1"
         @select="go"
       >
         <el-menu-item v-for="m in menus" :key="m.index" :index="m.index">
@@ -69,18 +70,25 @@ async function handleLogout() {
           <span>{{ m.title }}</span>
         </el-menu-item>
       </el-menu>
-      <div class="sidebar-footer">不奈何 · AI 数据标注平台</div>
+      <div class="sidebar-footer">
+        <div class="footer-divider"></div>
+        AI 数据标注平台
+      </div>
     </aside>
 
     <div class="main">
       <header class="topbar">
-        <div class="left">{{ $route.meta.title || auth.user?.nickname || 'Buyunaihe' }}</div>
+        <div class="left">{{ $route.meta.title || '工作台' }}</div>
         <div class="right">
           <el-dropdown @command="(c:string)=>c==='logout'?handleLogout():null">
             <span class="user-chip">
-              <el-avatar :size="32" :src="auth.user?.avatar_url">{{ (auth.user?.nickname || auth.user?.username || 'U').slice(0,1) }}</el-avatar>
-              <span class="uname">{{ auth.user?.nickname || auth.user?.username }}</span>
-              <el-tag size="small" effect="plain" type="primary">{{ auth.user ? ROLE_LABEL[auth.user.role_code] : '' }}</el-tag>
+              <el-avatar :size="34" :src="auth.user?.avatar_url" :style="{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }">
+                {{ (auth.user?.nickname || auth.user?.username || 'U').slice(0,1) }}
+              </el-avatar>
+              <div class="user-info">
+                <span class="uname">{{ auth.user?.nickname || auth.user?.username }}</span>
+                <span class="role">{{ auth.user ? ROLE_LABEL[auth.user.role_code] : '' }}</span>
+              </div>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -99,16 +107,86 @@ async function handleLogout() {
 
 <style scoped lang="scss">
 .layout { display: flex; height: 100%; }
-.sidebar { width: 220px; background: var(--lh-sidebar); color: #c7ccd6; display:flex; flex-direction:column; }
-.brand { height: 60px; display:flex; align-items:center; gap:10px; padding-left:22px; font-size:18px; font-weight:700; color:#fff; letter-spacing:0.5px; }
-.side-menu { border-right: none; flex:1; }
-.side-menu :deep(.el-menu-item) { height: 48px; line-height: 48px; }
-.side-menu :deep(.el-menu-item.is-active) { background: var(--lh-primary) !important; }
-.sidebar-footer { padding: 14px 22px; font-size: 12px; color: #5b6470; }
-.main { flex:1; display:flex; flex-direction:column; background:#f5f7fb; min-width:0; }
-.topbar { height:60px; background:#fff; border-bottom:1px solid #eef0f5; display:flex; align-items:center; justify-content:space-between; padding:0 24px; }
-.topbar .left { font-size:15px; font-weight:600; color:#1f2430; }
-.topbar .right .user-chip { display:flex; align-items:center; gap:8px; cursor:pointer; }
-.user-chip .uname { font-size:14px; color:#1f2430; }
+.sidebar { 
+  width: 240px; 
+  background: var(--lh-sidebar); 
+  color: #64748b; 
+  display:flex; 
+  flex-direction:column;
+  border-right: 1px solid var(--lh-border);
+}
+.brand { 
+  height: 64px; 
+  display:flex; 
+  align-items:center; 
+  gap:12px; 
+  padding-left:24px; 
+  font-size:20px; 
+  font-weight:700; 
+  color:var(--lh-text); 
+  letter-spacing:-0.5px;
+}
+.side-menu { border-right: none; flex:1; padding-top: 8px; }
+.side-menu :deep(.el-menu-item) { 
+  height: 48px; 
+  line-height: 48px; 
+  margin: 4px 16px;
+  border-radius: 8px;
+  &:hover { background: #f1f5f9 !important; }
+}
+.side-menu :deep(.el-menu-item.is-active) { 
+  background: var(--lh-primary-light) !important; 
+  color: var(--lh-primary) !important;
+  font-weight: 600;
+}
+.sidebar-footer { 
+  padding: 20px 24px; 
+  font-size: 12px; 
+  color: #94a3b8; 
+  text-align: center;
+}
+.footer-divider { 
+  height: 1px; 
+  background: var(--lh-border); 
+  margin-bottom: 16px;
+}
+.main { flex:1; display:flex; flex-direction:column; background:var(--lh-bg); min-width:0; }
+.topbar { 
+  height:64px; 
+  background:#fff; 
+  border-bottom:1px solid var(--lh-border); 
+  display:flex; 
+  align-items:center; 
+  justify-content:space-between; 
+  padding:0 32px; 
+}
+.topbar .left { 
+  font-size:16px; 
+  font-weight:600; 
+  color:var(--lh-text); 
+  letter-spacing:-0.3px;
+}
+.topbar .right .user-chip { 
+  display:flex; 
+  align-items:center; 
+  gap:12px; 
+  cursor:pointer;
+  padding: 6px 12px;
+  border-radius: 10px;
+  transition: background 0.2s;
+  &:hover { background: #f8fafc; }
+}
+.user-info { display: flex; flex-direction: column; }
+.user-info .uname { 
+  font-size:14px; 
+  color:var(--lh-text); 
+  font-weight: 500;
+  line-height: 1.3;
+}
+.user-info .role { 
+  font-size:12px; 
+  color:var(--lh-text-soft);
+  line-height: 1.3;
+}
 .content { flex:1; overflow:auto; }
 </style>

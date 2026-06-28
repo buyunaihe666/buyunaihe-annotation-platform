@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .. import config
@@ -12,6 +13,7 @@ from ..models import (
     DatasetItem,
     ReviewOpinion,
     Task,
+    TaskAssignment,
     TaskItem,
     TaskTransition,
     Template,
@@ -48,7 +50,12 @@ def review_tasks(
         .filter(TaskItem.status.in_(["submitted", "ai_reviewing", "reviewed"]))
     )
     if user.role_code == "reviewer":
-        q = q.filter(TaskItem.assigned_reviewer_id == user.id)
+        q = q.filter(
+            db.or_(
+                TaskItem.assigned_reviewer_id == user.id,
+                TaskItem.current_reviewer_id == user.id,
+            )
+        )
     if keyword:
         q = q.filter(Task.name.like(f"%{keyword}%"))
     rows = q.distinct().order_by(Task.id.desc()).all()
@@ -126,6 +133,13 @@ def _item_detail(db: Session, item_id: int) -> dict:
                 ai_report = r.json()
         except Exception:
             ai_report = None
+    # 获取流转时间线
+    transitions = (
+        db.query(TaskTransition)
+        .filter(TaskTransition.task_item_id == item_id)
+        .order_by(TaskTransition.id.asc())
+        .all()
+    )
     return {
         "item": {
             "id": item.id,
@@ -135,11 +149,21 @@ def _item_detail(db: Session, item_id: int) -> dict:
             "status": item.status,
             "assigned_labeler_id": item.assigned_labeler_id,
             "assigned_reviewer_id": item.assigned_reviewer_id,
+            "current_reviewer_id": item.current_reviewer_id,
         },
         "template_schema": schema_json,
         "raw_data": raw_data,
         "result": result_row.result if result_row else None,
         "ai_report": ai_report,
+        "transitions": [{
+            "id": tr.id,
+            "from_status": tr.from_status,
+            "to_status": tr.to_status,
+            "operator_id": tr.operator_id,
+            "operator_type": tr.operator_type,
+            "comment": tr.comment,
+            "created_at": tr.created_at.isoformat() if tr.created_at else None,
+        } for tr in transitions],
     }
 
 
@@ -211,8 +235,46 @@ def review_decision(
     db.add(opinion)
 
     from_status = item.status
+
+    # 如果当前不是驳回且存在审核链路，流转到下一级审核员
+    if body.decision == "approved":
+        # 找下一个审核顺序的审核员
+        next_reviewer = (
+            db.query(TaskAssignment)
+            .filter(
+                TaskAssignment.task_id == item.task_id,
+                TaskAssignment.role == "reviewer",
+                TaskAssignment.review_order > (
+                    db.query(TaskAssignment.review_order)
+                    .filter(TaskAssignment.task_id == item.task_id, TaskAssignment.user_id == user.id, TaskAssignment.role == "reviewer")
+                    .scalar() or 0
+                ),
+            )
+            .order_by(TaskAssignment.review_order)
+            .first()
+        )
+        if next_reviewer:
+            # 还有下一级审核员，流转到下一级
+            item.current_reviewer_id = next_reviewer.user_id
+            item.status = "reviewed"  # 保持待审状态，供下一级审核
+            db.add(TaskTransition(
+                task_id=item.task_id, task_item_id=item_id, from_status=from_status, to_status="reviewed",
+                operator_id=user.id, operator_type="reviewer", comment=f"通过 → 下一级审核员 #{next_reviewer.user_id}",
+            ))
+            db.commit()
+            db.refresh(item)
+            return ok({"task_item": {
+                "id": item.id, "task_id": item.task_id, "dataset_item_id": item.dataset_item_id,
+                "index": item.index, "status": item.status,
+                "assigned_labeler_id": item.assigned_labeler_id,
+                "assigned_reviewer_id": item.assigned_reviewer_id,
+                "current_reviewer_id": item.current_reviewer_id,
+                "review_chain": True, "next_reviewer_id": next_reviewer.user_id,
+            }})
+
     item.status = new_status
     item.assigned_reviewer_id = user.id
+    item.current_reviewer_id = None  # 审核链路结束
     db.add(TaskTransition(
         task_id=item.task_id, task_item_id=item_id, from_status=from_status, to_status=new_status,
         operator_id=user.id, operator_type="reviewer", comment=body.comment,
@@ -227,4 +289,46 @@ def review_decision(
         "status": item.status,
         "assigned_labeler_id": item.assigned_labeler_id,
         "assigned_reviewer_id": item.assigned_reviewer_id,
+    }})
+
+
+@router.post("/items/{item_id}/modify-and-pass")
+def modify_and_pass(
+    item_id: int,
+    body: DecisionRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("reviewer", "owner", "admin")),
+):
+    """修改标注结果后直接通过，修改结果保存在 annotation_results 中。"""
+    item = db.query(TaskItem).filter(TaskItem.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "item not found", "data": None})
+    result_row = db.query(AnnotationResult).filter(AnnotationResult.task_item_id == item_id).first()
+    if result_row and body.comment:
+        import json as _json
+        try:
+            modified = _json.loads(body.comment) if body.comment.startswith("{") else None
+        except Exception:
+            modified = None
+        if modified:
+            result_row.result = modified
+    opinion = ReviewOpinion(
+        task_id=item.task_id,
+        task_item_id=item_id,
+        reviewer_id=user.id,
+        decision="modify_approve",
+        comment=body.comment,
+    )
+    db.add(opinion)
+    from_status = item.status
+    item.status = "approved"
+    db.add(TaskTransition(
+        task_id=item.task_id, task_item_id=item_id, from_status=from_status, to_status="approved",
+        operator_id=user.id, operator_type="reviewer", comment=f"修改后通过: {body.comment}",
+    ))
+    db.commit()
+    db.refresh(item)
+    return ok({"task_item": {
+        "id": item.id, "task_id": item.task_id, "dataset_item_id": item.dataset_item_id,
+        "index": item.index, "status": item.status,
     }})

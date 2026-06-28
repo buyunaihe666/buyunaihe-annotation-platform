@@ -18,9 +18,11 @@ export interface LoginResult {
 }
 
 export type MaterialType =
+  | 'text_display'
   | 'text'
   | 'textarea'
   | 'number'
+  | 'rating'
   | 'radio'
   | 'checkbox'
   | 'select'
@@ -102,9 +104,26 @@ export interface Task {
   status: TaskStatus
   enable_ai_audit: number | boolean
   enable_ai_suggestion: number | boolean
+  quota: number
+  max_item_count: number
+  deadline?: string
+  reward_rules?: Record<string, any>
+  tags?: string[]
+  distribution_type: string
+  ai_audit_config?: {
+    audit_prompt?: string
+    pass_score?: number
+    review_score?: number
+    dimensions?: Array<{ name: string; weight: number }>
+  }
   template?: Template
   dataset?: Dataset
   progress?: TaskProgress
+  available_count?: number
+  total_count?: number
+  my_items?: Array<{ id: number; status: string; index: number; reward?: number }>
+  total_reward?: number
+  reward_rules?: Record<string, any>
   created_by?: number
   created_at?: string
   updated_at?: string
@@ -128,8 +147,20 @@ export interface TaskItem {
   status: TaskItemStatus
   assigned_labeler_id?: number
   assigned_reviewer_id?: number
+  current_reviewer_id?: number
   created_at?: string
   updated_at?: string
+}
+
+export interface TaskTransition {
+  id: number
+  task_item_id?: number
+  from_status?: string
+  to_status: string
+  operator_id?: number
+  operator_type?: string
+  comment?: string
+  created_at?: string
 }
 
 export interface TaskProgress {
@@ -160,6 +191,7 @@ export interface AnnotationItemResponse {
   raw_data: Record<string, any>
   result: Record<string, any> | null
   suggestion?: any
+  transitions?: TaskTransition[]
 }
 
 export interface SuggestionState {
@@ -174,6 +206,7 @@ export interface ReviewItemResponse {
   raw_data: Record<string, any>
   result: Record<string, any> | null
   ai_report?: AiReport
+  transitions?: TaskTransition[]
 }
 
 export interface AiReport {

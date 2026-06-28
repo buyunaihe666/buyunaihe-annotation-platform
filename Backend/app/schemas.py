@@ -120,6 +120,15 @@ class TaskCreate(BaseModel):
     dataset_id: Optional[int] = None
     enable_ai_audit: bool = True
     enable_ai_suggestion: bool = True
+    # 资源配置
+    quota: int = 0
+    deadline: Optional[datetime] = None
+    reward_rules: Optional[Dict[str, Any]] = None
+    # 分类与分发配置
+    tags: Optional[List[str]] = None
+    distribution_type: str = "first_come_first_serve"
+    # AI 预审配置
+    ai_audit_config: Optional[Dict[str, Any]] = None
 
 
 class TaskUpdate(BaseModel):
@@ -129,6 +138,12 @@ class TaskUpdate(BaseModel):
     dataset_id: Optional[int] = None
     enable_ai_audit: Optional[bool] = None
     enable_ai_suggestion: Optional[bool] = None
+    quota: Optional[int] = None
+    deadline: Optional[datetime] = None
+    reward_rules: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    distribution_type: Optional[str] = None
+    ai_audit_config: Optional[Dict[str, Any]] = None
 
 
 class TaskOut(BaseModel):
@@ -140,6 +155,13 @@ class TaskOut(BaseModel):
     status: str
     enable_ai_audit: int
     enable_ai_suggestion: int
+    quota: int = 0
+    max_item_count: int = 0
+    deadline: Optional[datetime] = None
+    reward_rules: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    distribution_type: str = "first_come_first_serve"
+    ai_audit_config: Optional[Dict[str, Any]] = None
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
 
@@ -147,6 +169,7 @@ class TaskOut(BaseModel):
 class AssignmentIn(BaseModel):
     user_id: int
     role: str
+    review_order: int = 0  # 审核链路顺序
 
 
 class AssignRequest(BaseModel):
@@ -183,6 +206,7 @@ class DecisionRequest(BaseModel):
 class ExportRequest(BaseModel):
     task_id: int
     format: str
+    fields: Optional[List[str]] = None  # 选择导出哪些字段
 
 
 class ExportRecordOut(BaseModel):

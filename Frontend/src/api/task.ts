@@ -26,6 +26,10 @@ export function deleteTask(id: number) {
   return http.delete(`/tasks/${id}`)
 }
 
+export function batchDeleteTasks(ids: number[]) {
+  return http.post<any, { deleted: number }>('/tasks/batch-delete', { ids })
+}
+
 export function publishTask(id: number) {
   return http.post<any, Task>(`/tasks/${id}/publish`)
 }
@@ -42,7 +46,7 @@ export function getTaskProgress(id: number) {
   return http.get<any, TaskProgress>(`/tasks/${id}/progress`)
 }
 
-export function assignTask(id: number, assignments: { user_id: number; role: string }[]) {
+export function assignTask(id: number, assignments: { user_id: number; role: string; review_order?: number }[]) {
   return http.post(`/tasks/${id}/assign`, { assignments })
 }
 
