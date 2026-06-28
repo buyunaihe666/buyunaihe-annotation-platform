@@ -236,8 +236,9 @@ def review_decision(
 
     from_status = item.status
 
-    # 如果当前不是驳回且存在审核链路，流转到下一级审核员
-    if body.decision == "approved":
+    # admin/owner 拥有最高权限，直接终结审核链路，不做流转
+    # 普通审核员：如果当前不是驳回且存在审核链路，流转到下一级审核员
+    if body.decision == "approved" and user.role_code not in ("admin", "owner"):
         # 找下一个审核顺序的审核员
         next_reviewer = (
             db.query(TaskAssignment)

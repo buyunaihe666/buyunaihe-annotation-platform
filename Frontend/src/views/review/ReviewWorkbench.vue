@@ -59,7 +59,7 @@ function pollAiReport() {
   stopPolling()
   pollTimer = setInterval(async () => {
     const status = await fetchAiReport()
-    if (status === 'done' || status === 'error') {
+    if (status !== 'processing' && status !== 'pending') {
       aiLoading.value = false
       stopPolling()
     }
@@ -254,13 +254,12 @@ onUnmounted(stopPolling)
   display: grid;
   grid-template-columns: 260px 1fr 360px;
   gap: 16px;
-  height: calc(100vh - 160px);
+  align-items: start;
 }
 .panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: hidden;
 }
 .panel-header {
   padding: 16px 20px;
@@ -302,17 +301,6 @@ onUnmounted(stopPolling)
 }
 .card-body {
   padding: 20px;
-}
-.center-panel {
-  overflow-y: auto;
-  padding-right: 4px;
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: var(--lh-border);
-    border-radius: 3px;
-  }
 }
 .item-nav-list {
   display: flex;

@@ -57,7 +57,7 @@ function handleTabChange() {
 }
 
 async function claim(task: Task) {
-  const count = claimCountMap.value[task.id] ?? claimCount
+  const count = claimCountMap.value[task.id] ?? claimCount.value
   if (task.available_count !== undefined && task.available_count === 0) {
     ElMessage.warning('该任务已无可领取的标注项')
     return

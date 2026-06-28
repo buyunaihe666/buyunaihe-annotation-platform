@@ -31,8 +31,8 @@ const labelerStats = ref<any[]>([])
 
 const assignees = ref<TaskAssignment[]>([])
 const users = ref<User[]>([])
-const labelers = computed(() => users.value.filter(u => u.role_code === 'labeler'))
-const reviewers = computed(() => users.value.filter(u => u.role_code === 'reviewer'))
+const labelers = computed(() => users.value.filter(u => ['labeler', 'admin', 'owner'].includes(u.role_code)))
+const reviewers = computed(() => users.value.filter(u => ['reviewer', 'admin', 'owner'].includes(u.role_code)))
 
 const items = ref<TaskItem[]>([])
 const loadingItems = ref(false)

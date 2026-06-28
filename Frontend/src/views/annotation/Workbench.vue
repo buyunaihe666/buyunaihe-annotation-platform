@@ -275,13 +275,12 @@ onUnmounted(stopPolling)
   display: grid;
   grid-template-columns: 260px 1fr 320px;
   gap: 16px;
-  height: calc(100vh - 160px);
+  align-items: start;
 }
 .panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: hidden;
 }
 .panel-header {
   display: flex;
