@@ -264,7 +264,7 @@ onMounted(async () => {
         <el-table-column label="文件" min-width="220">
           <template #default="{ row }">
             <div v-if="row.files?.length">
-              <a v-for="f in row.files" :key="f.id" :href="exportDownloadUrl(row.id)" target="_blank" style="margin-right:10px;color:#4a6cf7">
+              <a v-for="f in row.files" :key="f.id" :href="f.url" target="_blank" style="margin-right:10px;color:#4a6cf7">
                 {{ f.filename }} ({{ formatSize(f.size) }})
               </a>
             </div>
@@ -297,7 +297,7 @@ onMounted(async () => {
       <el-form label-position="top">
         <el-form-item label="导出格式">
           <el-radio-group v-model="exportForm.format">
-            <el-radio v-for="f in EXPORT_FORMATS" :key="f.value" :label="f.value">{{ f.label }}</el-radio>
+            <el-radio v-for="f in EXPORT_FORMATS" :key="f.value" :value="f.value">{{ f.label }}</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>

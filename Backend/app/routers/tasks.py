@@ -277,6 +277,7 @@ def list_task_items(
                 "status": r.status,
                 "assigned_labeler_id": r.assigned_labeler_id,
                 "assigned_reviewer_id": r.assigned_reviewer_id,
+                "updated_at": r.updated_at,
             }
             for r in rows
         ],

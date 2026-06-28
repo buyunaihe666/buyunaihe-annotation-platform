@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAnnotationItem, saveDraft, submitItem, requestSuggestion, getSuggestion } from '@/api'
@@ -131,6 +131,22 @@ function safeParse(s: string) {
 
 onMounted(load)
 onUnmounted(stopPolling)
+
+// Auto-poll when ai_reviewing
+watch(task, (val) => {
+  if (val?.status === 'ai_reviewing') {
+    startAuditPolling()
+  } else {
+    stopPolling()
+  }
+})
+
+function startAuditPolling() {
+  stopPolling()
+  pollTimer = setInterval(async () => {
+    await load()
+  }, 3000)
+}
 </script>
 
 <template>

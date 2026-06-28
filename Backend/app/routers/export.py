@@ -191,7 +191,16 @@ def list_exports(task_id: int | None = Query(default=None), db: Session = Depend
     if task_id is not None:
         q = q.filter(ExportRecord.task_id == task_id)
     rows = q.order_by(ExportRecord.id.desc()).all()
-    return ok([_record_out(r) for r in rows])
+    result = []
+    for r in rows:
+        out = _record_out(r)
+        files = db.query(ExportFile).filter(ExportFile.export_record_id == r.id).all()
+        out["files"] = [
+            {"id": f.id, "minio_object": f.minio_object, "filename": f.filename, "size": f.size, "url": f.url}
+            for f in files
+        ]
+        result.append(out)
+    return ok(result)
 
 
 @router.get("/{export_id}")

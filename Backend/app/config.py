@@ -13,6 +13,13 @@ MYSQL_USER = os.environ.get("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "root")
 MYSQL_DATABASE = os.environ.get("MYSQL_DATABASE", "labelhub")
 
+# PostgreSQL (preferred when reusing an existing PG server)
+PG_HOST = os.environ.get("PG_HOST", os.environ.get("MYSQL_HOST", "localhost"))
+PG_PORT = os.environ.get("PG_PORT", "5432")
+PG_USER = os.environ.get("PG_USER", os.environ.get("MYSQL_USER", "postgres"))
+PG_PASSWORD = os.environ.get("PG_PASSWORD", os.environ.get("MYSQL_PASSWORD", ""))
+PG_DATABASE = os.environ.get("PG_DATABASE", os.environ.get("MYSQL_DATABASE", "labelhub"))
+
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
 
@@ -46,6 +53,6 @@ MINIO_BUCKETS = ["annotation", "dataset", "export", "template"]
 
 def mysql_url() -> str:
     return (
-        f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}"
-        f"/{MYSQL_DATABASE}?charset=utf8mb4"
+        f"postgresql+psycopg2://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}"
+        f"/{PG_DATABASE}"
     )

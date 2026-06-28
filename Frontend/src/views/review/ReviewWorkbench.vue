@@ -151,9 +151,9 @@ const scoreColor = computed(() => {
           <el-form label-position="top">
             <el-form-item label="决策结果">
               <el-radio-group v-model="decision">
-                <el-radio label="approved">通过</el-radio>
-                <el-radio label="rejected">驳回</el-radio>
-                <el-radio label="modify_approve">修改后通过</el-radio>
+                <el-radio value="approved">通过</el-radio>
+                <el-radio value="rejected">驳回</el-radio>
+                <el-radio value="modify_approve">修改后通过</el-radio>
               </el-radio-group>
             </el-form-item>
             <el-form-item label="审核意见">

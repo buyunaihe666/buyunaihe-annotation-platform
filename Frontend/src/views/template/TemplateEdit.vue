@@ -35,12 +35,35 @@ function addMaterial(type: MaterialType) {
     type,
     required: false,
     options: type === 'radio' || type === 'checkbox' || type === 'select' ? ['选项A', '选项B'] : undefined,
-    props: {},
+    props: initProps(type),
     sortOrder: materials.value.length
   }
   materials.value.push(m)
   selectedId.value = m.id
 }
+
+function initProps(type: MaterialType): Record<string, any> {
+  switch (type) {
+    case 'textarea': return { rows: 4 }
+    case 'select': return { multiple: false }
+    case 'number': return { min: undefined, max: undefined, step: 1 }
+    default: return {}
+  }
+}
+
+// Ensure props/options are initialized when type changes
+watch(() => selected.value?.type, (newType, oldType) => {
+  if (!selected.value || newType === oldType) return
+  const m = selected.value
+  // Reset options for choice types
+  if (['radio', 'checkbox', 'select'].includes(newType)) {
+    if (!m.options || !m.options.length) m.options = ['选项A', '选项B']
+  } else {
+    m.options = undefined
+  }
+  // Initialize props for the new type
+  m.props = initProps(newType)
+})
 
 function selectMaterial(mid: string) {
   selectedId.value = mid
@@ -158,7 +181,7 @@ watch(materials, () => { if (!selectedId.value && materials.value[0]) selectedId
       <el-col :span="5">
         <el-card shadow="never" class="panel">
           <template #header>
-            <div style="display:flex;align-items:center;gap:6px"><el-icon><el-icon><DocumentAdd /></el-icon></el-icon>组件库</div>
+            <div style="display:flex;align-items:center;gap:6px"><el-icon><DocumentAdd /></el-icon>组件库</div>
           </template>
           <div class="palette">
             <div v-for="t in MATERIAL_TYPES" :key="t.value" class="palette-item" @click="addMaterial(t.value)">

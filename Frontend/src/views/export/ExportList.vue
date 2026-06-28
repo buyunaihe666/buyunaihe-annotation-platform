@@ -56,7 +56,7 @@ onMounted(async () => {
         <el-table-column label="文件" min-width="240">
           <template #default="{ row }">
             <div v-if="row.files?.length">
-              <a v-for="f in row.files" :key="f.id" :href="downloadUrl(row.id)" target="_blank" style="margin-right:10px;color:#4a6cf7">
+              <a v-for="f in row.files" :key="f.id" :href="f.url" target="_blank" style="margin-right:10px;color:#4a6cf7">
                 {{ f.filename }} ({{ formatSize(f.size) }})
               </a>
             </div>

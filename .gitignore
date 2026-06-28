@@ -23,3 +23,16 @@ Thumbs.db
 # Deploy local env
 deploy/docker.env
 deploy/build.log
+
+# SSH keys / secrets — never commit
+*.pem
+*.key
+*.ppk
+
+# Build artifacts
+*.tar.gz
+frontend_dist/
+deploy/test_data/
+
+# Docker prebuilt
+Frontend/Dockerfile.prebuilt

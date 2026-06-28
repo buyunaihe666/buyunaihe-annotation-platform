@@ -1,4 +1,4 @@
-# 不语奈何 AI 数据标注平台 (Buyunaihe AI Data Annotation Platform)
+# 不奈何 AI 数据标注平台 (Buyunaihe AI Data Annotation Platform)
 
 <div align="center">
 

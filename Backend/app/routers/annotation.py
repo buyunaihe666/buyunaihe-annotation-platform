@@ -118,6 +118,18 @@ def get_item(item_id: int, db: Session = Depends(get_db), user: User = Depends(g
                 suggestion = r.json()
         except Exception:
             suggestion = None
+    # Auto-transition: if ai_reviewing, check if audit is done
+    if item.status == "ai_reviewing" and result_row and result_row.ai_report_id:
+        try:
+            r = httpx.get(f"{config.AGENT_WEB_URL}/audit/{result_row.ai_report_id}", timeout=5)
+            if r.status_code == 200:
+                audit_data = r.json()
+                if audit_data.get("status") in ("done", "failed"):
+                    item.status = "reviewed"
+                    _log_transition(db, item.task_id, item_id, "ai_reviewing", "reviewed", 0, "AI audit completed")
+                    db.commit()
+        except Exception:
+            pass
     return ok({
         "item": _item_out(item),
         "template_schema": schema_json,

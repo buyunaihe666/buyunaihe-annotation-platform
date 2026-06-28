@@ -22,8 +22,8 @@ const menus = computed<MenuItem[]>(() => {
     { index: '/tasks', title: '任务管理', icon: List, roles: ['owner', 'admin'] },
     { index: '/exports', title: '导出记录', icon: Download, roles: ['owner', 'admin'] },
     { index: '/users', title: '用户管理', icon: User, roles: ['owner', 'admin'] },
-    { index: '/square', title: '标注广场', icon: DataAnalysis, roles: ['labeler'] },
-    { index: '/review', title: '审核任务', icon: Connection, roles: ['reviewer'] }
+    { index: '/square', title: '标注广场', icon: DataAnalysis, roles: ['labeler', 'owner', 'admin'] },
+    { index: '/review', title: '审核任务', icon: Connection, roles: ['reviewer', 'owner', 'admin'] }
   ]
   const role = auth.user?.role_code
   return all.filter(m => !role || m.roles.includes(role))

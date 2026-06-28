@@ -45,9 +45,10 @@ def review_tasks(
     q = (
         db.query(Task)
         .join(TaskItem, TaskItem.task_id == Task.id)
-        .filter(TaskItem.assigned_reviewer_id == user.id)
         .filter(TaskItem.status.in_(["submitted", "ai_reviewing", "reviewed"]))
     )
+    if user.role_code == "reviewer":
+        q = q.filter(TaskItem.assigned_reviewer_id == user.id)
     if keyword:
         q = q.filter(Task.name.like(f"%{keyword}%"))
     rows = q.distinct().order_by(Task.id.desc()).all()
@@ -211,6 +212,7 @@ def review_decision(
 
     from_status = item.status
     item.status = new_status
+    item.assigned_reviewer_id = user.id
     db.add(TaskTransition(
         task_id=item.task_id, task_item_id=item_id, from_status=from_status, to_status=new_status,
         operator_id=user.id, operator_type="reviewer", comment=body.comment,

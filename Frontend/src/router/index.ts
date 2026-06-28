@@ -21,11 +21,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'tasks/:id', name: 'task-detail', component: () => import('@/views/task/TaskDetail.vue'), meta: { roles: ['owner', 'admin'] } },
       { path: 'exports', name: 'exports', component: () => import('@/views/export/ExportList.vue'), meta: { roles: ['owner', 'admin'] } },
       { path: 'users', name: 'users', component: () => import('@/views/user/UserList.vue'), meta: { roles: ['owner', 'admin'] } },
-      { path: 'square', name: 'square', component: () => import('@/views/annotation/Square.vue'), meta: { roles: ['labeler'] } },
-      { path: 'workbench/:itemId', name: 'workbench', component: () => import('@/views/annotation/Workbench.vue'), meta: { roles: ['labeler'] } },
-      { path: 'review', name: 'review', component: () => import('@/views/review/ReviewTaskList.vue'), meta: { roles: ['reviewer'] } },
-      { path: 'review/items/:taskId', name: 'review-items', component: () => import('@/views/review/ReviewTaskItems.vue'), meta: { roles: ['reviewer'] } },
-      { path: 'review/workbench/:itemId', name: 'review-workbench', component: () => import('@/views/review/ReviewWorkbench.vue'), meta: { roles: ['reviewer'] } }
+      { path: 'square', name: 'square', component: () => import('@/views/annotation/Square.vue'), meta: { roles: ['labeler', 'owner', 'admin'] } },
+      { path: 'workbench/:itemId', name: 'workbench', component: () => import('@/views/annotation/Workbench.vue'), meta: { roles: ['labeler', 'owner', 'admin'] } },
+      { path: 'review', name: 'review', component: () => import('@/views/review/ReviewTaskList.vue'), meta: { roles: ['reviewer', 'owner', 'admin'] } },
+      { path: 'review/items/:taskId', name: 'review-items', component: () => import('@/views/review/ReviewTaskItems.vue'), meta: { roles: ['reviewer', 'owner', 'admin'] } },
+      { path: 'review/workbench/:itemId', name: 'review-workbench', component: () => import('@/views/review/ReviewWorkbench.vue'), meta: { roles: ['reviewer', 'owner', 'admin'] } }
     ]
   },
   { path: '/:pathMatch(.*)*', name: 'notfound', component: () => import('@/views/NotFound.vue'), meta: { public: true } }

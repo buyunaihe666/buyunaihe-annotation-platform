@@ -36,6 +36,7 @@ watch(
 
 function defaultFor(m: any): any {
   if (m.type === 'checkbox') return []
+  if (m.type === 'select' && m.props?.multiple) return []
   if (m.type === 'number') return undefined
   return undefined
 }
@@ -122,10 +123,10 @@ defineExpose({ validate, reset, sync })
       <el-input v-else-if="m.type === 'textarea'" v-model="local[m.fieldKey]" type="textarea" :rows="m.props?.rows || 4" :placeholder="`请输入${m.label}`" @input="onInput" />
       <el-input-number v-else-if="m.type === 'number'" v-model="local[m.fieldKey]" :min="m.props?.min" :max="m.props?.max" :step="m.props?.step || 1" controls-position="right" @change="onInput" />
       <el-radio-group v-else-if="m.type === 'radio'" v-model="local[m.fieldKey]" @change="onInput">
-        <el-radio v-for="opt in m.options || []" :key="opt" :label="opt">{{ opt }}</el-radio>
+        <el-radio v-for="opt in m.options || []" :key="opt" :value="opt">{{ opt }}</el-radio>
       </el-radio-group>
       <el-checkbox-group v-else-if="m.type === 'checkbox'" v-model="local[m.fieldKey]" @change="onInput">
-        <el-checkbox v-for="opt in m.options || []" :key="opt" :label="opt">{{ opt }}</el-checkbox>
+        <el-checkbox v-for="opt in m.options || []" :key="opt" :value="opt">{{ opt }}</el-checkbox>
       </el-checkbox-group>
       <el-select v-else-if="m.type === 'select'" v-model="local[m.fieldKey]" clearable :multiple="m.props?.multiple" :placeholder="`请选择${m.label}`" @change="onInput">
         <el-option v-for="opt in m.options || []" :key="opt" :label="opt" :value="opt" />

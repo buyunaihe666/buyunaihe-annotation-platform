@@ -13,6 +13,12 @@ class Config:
     MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "root")
     MYSQL_DATABASE: str = os.getenv("MYSQL_DATABASE", "labelhub_agent")
 
+    PG_HOST: str = os.getenv("PG_HOST", os.getenv("MYSQL_HOST", "127.0.0.1"))
+    PG_PORT: str = os.getenv("PG_PORT", "5432")
+    PG_USER: str = os.getenv("PG_USER", os.getenv("MYSQL_USER", "postgres"))
+    PG_PASSWORD: str = os.getenv("PG_PASSWORD", os.getenv("MYSQL_PASSWORD", ""))
+    PG_DATABASE: str = os.getenv("PG_DATABASE", os.getenv("MYSQL_DATABASE", "labelhub_agent"))
+
     RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST", "127.0.0.1")
     RABBITMQ_PORT: int = int(os.getenv("RABBITMQ_PORT", "5672"))
     RABBITMQ_USER: str = os.getenv("RABBITMQ_USER", "guest")
@@ -29,8 +35,8 @@ class Config:
     @property
     def db_url(self) -> str:
         return (
-            f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
-            f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}?charset=utf8mb4"
+            f"postgresql+psycopg2://{self.PG_USER}:{self.PG_PASSWORD}"
+            f"@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
         )
 
     @property

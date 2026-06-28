@@ -1,6 +1,6 @@
 flask
 flask-cors
-pymysql
+psycopg2-binary
 sqlalchemy
 pika
 langchain
