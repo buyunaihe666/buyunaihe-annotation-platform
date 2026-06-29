@@ -53,9 +53,9 @@ async function handleLogin() {
         <el-button type="primary" :loading="loading" class="submit" @click="handleLogin">登 录</el-button>
       </el-form>
       <div class="hint">
-        默认账号：admin / admin
+        默认账号：admin / admin123
         <br/>
-        <span class="hint-sub">标注员: labeler1 / admin | 审核员: reviewer1 / admin</span>
+        <span class="hint-sub">标注员: labeler1 / admin123 | 审核员: reviewer1 / admin123</span>
       </div>
     </div>
   </div>
