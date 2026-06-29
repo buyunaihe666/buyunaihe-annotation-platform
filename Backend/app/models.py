@@ -8,10 +8,11 @@ from sqlalchemy import (
     DateTime,
     Integer,
     String,
-    JSON,
    DECIMAL,
+    JSON,
  func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -70,7 +71,7 @@ class Template(Base):
     name = Column(String(128), nullable=False)
     description = Column(String(512))
     status = Column(String(16), nullable=False, default="draft")
-    schema_json = Column(JSON)
+    schema_json = Column(JSONB)
     created_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.current_timestamp())
     updated_at = Column(
@@ -89,7 +90,7 @@ class Dataset(Base):
     file_count = Column(Integer, nullable=False, default=0)
     item_count = Column(Integer, nullable=False, default=0)
     status = Column(String(16), nullable=False, default="active")
-    field_mapping_json = Column(JSON)
+    field_mapping_json = Column(JSONB)
     created_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.current_timestamp())
     updated_at = Column(
@@ -117,8 +118,8 @@ class DatasetItem(Base):
     dataset_id = Column(BigInteger, nullable=False)
     file_id = Column(BigInteger)
     index = Column(Integer, nullable=False, default=0)
-    raw_data = Column(JSON)
-    mapped_fields = Column(JSON)
+    raw_data = Column(JSONB)
+    mapped_fields = Column(JSONB)
     status = Column(String(16), nullable=False, default="pending")
     created_at = Column(DateTime, server_default=func.current_timestamp())
 
@@ -138,14 +139,14 @@ class Task(Base):
     quota = Column(Integer, nullable=False, default=0)  # 任务配额（最大不能超过数据集总量）
     max_item_count = Column(Integer, nullable=False, default=0)  # 数据集总量
     deadline = Column(DateTime)  # 截止时间
-    reward_rules = Column(JSON)  # 奖励规则 {"per_item": 0.5, "bonus_approved": 1.0}
+    reward_rules = Column(JSONB)  # 奖励规则 {"per_item": 0.5, "bonus_approved": 1.0}
 
     # --- 分类与分发配置 ---
     tags = Column(JSON)  # 标签列表 ["文本","情感"]
     distribution_type = Column(String(24), nullable=False, default="first_come_first_serve")  # first_come_first_serve | assigned
 
     # --- AI 预审配置 ---
-    ai_audit_config = Column(JSON)  # {"audit_prompt": "...", "pass_score": 80, "review_score": 60, "dimensions": [{"name":"准确性","weight":0.5},{"name":"完整性","weight":0.3},{"name":"一致性","weight":0.2}]}
+    ai_audit_config = Column(JSONB)  # {"audit_prompt": "...", "pass_score": 80, "review_score": 60, "dimensions": [{"name":"准确性","weight":0.5},{"name":"完整性","weight":0.3},{"name":"一致性","weight":0.2}]}
 
     created_by = Column(BigInteger)
     created_at = Column(DateTime, server_default=func.current_timestamp())
@@ -222,7 +223,7 @@ class AnnotationResult(Base):
     task_id = Column(BigInteger, nullable=False)
     task_item_id = Column(BigInteger, nullable=False, unique=True)
     labeler_id = Column(BigInteger, nullable=False)
-    result = Column(JSON)
+    result = Column(JSONB)
     ai_suggestion_id = Column(String(64))
     ai_report_id = Column(String(64))
     status = Column(String(16), nullable=False, default="draft")

@@ -52,3 +52,10 @@ test_dataset_*.json
 test_*.py
 test_*.ps1
 check_*.py
+
+# Debug / reset / seed scripts (root level)
+debug_*.ps1
+debug_*.py
+reset_pw.py
+reset_task2.sql
+seed_test.py

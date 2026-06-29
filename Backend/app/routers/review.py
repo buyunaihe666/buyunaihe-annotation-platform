@@ -25,6 +25,20 @@ from ..schemas import DecisionRequest
 router = APIRouter(prefix="/api/review", tags=["review"])
 
 
+def _check_task_completion(db: Session, task_id: int):
+    """当任务所有项都处于终态时，自动将任务状态设为 completed"""
+    total = db.query(TaskItem).filter(TaskItem.task_id == task_id).count()
+    finished = db.query(TaskItem).filter(
+        TaskItem.task_id == task_id,
+        TaskItem.status.in_(["approved", "rejected", "completed"]),
+    ).count()
+    if total > 0 and total == finished:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if task and task.status == "published":
+            task.status = "completed"
+            db.commit()
+
+
 def _task_out(t: Task) -> dict:
     return {
         "id": t.id,
@@ -51,14 +65,15 @@ def review_tasks(
     )
     if user.role_code == "reviewer":
         q = q.filter(
-            db.or_(
+            or_(
                 TaskItem.assigned_reviewer_id == user.id,
                 TaskItem.current_reviewer_id == user.id,
+                TaskItem.assigned_reviewer_id.is_(None),
             )
         )
     if keyword:
         q = q.filter(Task.name.like(f"%{keyword}%"))
-    rows = q.distinct().order_by(Task.id.desc()).all()
+    rows = q.group_by(Task.id).order_by(Task.id.desc()).all()
     return ok([_task_out(t) for t in rows])
 
 
@@ -71,9 +86,37 @@ def review_items(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("reviewer", "owner", "admin")),
 ):
+    # Batch auto-transition: check all ai_reviewing items for this task
+    stuck = db.query(TaskItem).filter(
+        TaskItem.task_id == task_id, TaskItem.status == "ai_reviewing"
+    ).all()
+    for si in stuck:
+        sr = db.query(AnnotationResult).filter(AnnotationResult.task_item_id == si.id).first()
+        if sr and sr.ai_report_id:
+            try:
+                r = httpx.get(f"{config.AGENT_WEB_URL}/audit/{sr.ai_report_id}", timeout=5)
+                if r.status_code == 200:
+                    ad = r.json()
+                    if ad.get("status") in ("done", "failed"):
+                        si.status = "submitted"
+                        db.add(TaskTransition(
+                            task_id=si.task_id, task_item_id=si.id,
+                            from_status="ai_reviewing", to_status="submitted",
+                            operator_id=0, operator_type="system",
+                            comment="AI audit completed",
+                        ))
+            except Exception:
+                pass
+    db.commit()
+
     q = db.query(TaskItem).filter(TaskItem.task_id == task_id)
     if user.role_code == "reviewer":
-        q = q.filter(TaskItem.assigned_reviewer_id == user.id)
+        q = q.filter(
+            or_(
+                TaskItem.assigned_reviewer_id == user.id,
+                TaskItem.assigned_reviewer_id.is_(None),
+            )
+        )
     if status_filter:
         q = q.filter(TaskItem.status == status_filter)
     else:
@@ -94,6 +137,40 @@ def review_items(
             for r in rows
         ],
         "total": total,
+    })
+
+
+@router.get("/items/{item_id}/ai-report")
+def review_ai_report(item_id: int, db: Session = Depends(get_db), user: User = Depends(require_role("reviewer", "owner", "admin"))):
+    item = db.query(TaskItem).filter(TaskItem.id == item_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "message": "item not found", "data": None})
+    opinion = (
+        db.query(ReviewOpinion)
+        .filter(ReviewOpinion.task_item_id == item_id, ReviewOpinion.ai_report_id.isnot(None))
+        .order_by(ReviewOpinion.id.desc())
+        .first()
+    )
+    audit_id = opinion.ai_report_id if opinion else None
+    if not audit_id:
+        result = db.query(AnnotationResult).filter(AnnotationResult.task_item_id == item_id).first()
+        if result and result.ai_report_id:
+            audit_id = result.ai_report_id
+    if not audit_id:
+        return ok({"status": "none", "score": None, "issues": [], "reasoning": None, "suggestion": None})
+    try:
+        r = httpx.get(f"{config.AGENT_WEB_URL}/audit/{audit_id}", timeout=5)
+        if r.status_code != 200:
+            return ok({"status": "error", "score": None, "issues": [], "reasoning": None, "suggestion": None})
+        data = r.json()
+    except Exception:
+        return ok({"status": "unavailable", "score": None, "issues": [], "reasoning": None, "suggestion": None})
+    return ok({
+        "status": data.get("status"),
+        "score": data.get("score"),
+        "issues": data.get("issues"),
+        "reasoning": data.get("reasoning"),
+        "suggestion": data.get("suggestion"),
     })
 
 
@@ -131,6 +208,16 @@ def _item_detail(db: Session, item_id: int) -> dict:
             r = httpx.get(f"{config.AGENT_WEB_URL}/audit/{ai_report_id}", timeout=5)
             if r.status_code == 200:
                 ai_report = r.json()
+                # Auto-transition: if ai_reviewing and audit is done, move to reviewed
+                if item.status == "ai_reviewing" and ai_report.get("status") in ("done", "failed"):
+                    item.status = "reviewed"
+                    db.add(TaskTransition(
+                        task_id=item.task_id, task_item_id=item_id,
+                        from_status="ai_reviewing", to_status="reviewed",
+                        operator_id=0, operator_type="system",
+                        comment="AI audit completed",
+                    ))
+                    db.commit()
         except Exception:
             ai_report = None
     # 获取流转时间线
@@ -165,40 +252,6 @@ def _item_detail(db: Session, item_id: int) -> dict:
             "created_at": tr.created_at.isoformat() if tr.created_at else None,
         } for tr in transitions],
     }
-
-
-@router.get("/items/{item_id}/ai-report")
-def review_ai_report(item_id: int, db: Session = Depends(get_db), user: User = Depends(require_role("reviewer", "owner", "admin"))):
-    item = db.query(TaskItem).filter(TaskItem.id == item_id).first()
-    if item is None:
-        raise HTTPException(status_code=404, detail={"code": 404, "message": "item not found", "data": None})
-    opinion = (
-        db.query(ReviewOpinion)
-        .filter(ReviewOpinion.task_item_id == item_id, ReviewOpinion.ai_report_id.isnot(None))
-        .order_by(ReviewOpinion.id.desc())
-        .first()
-    )
-    audit_id = opinion.ai_report_id if opinion else None
-    if not audit_id:
-        result = db.query(AnnotationResult).filter(AnnotationResult.task_item_id == item_id).first()
-        if result and result.ai_report_id:
-            audit_id = result.ai_report_id
-    if not audit_id:
-        return ok({"status": "none", "score": None, "issues": [], "reasoning": None, "suggestion": None})
-    try:
-        r = httpx.get(f"{config.AGENT_WEB_URL}/audit/{audit_id}", timeout=5)
-        if r.status_code != 200:
-            return ok({"status": "error", "score": None, "issues": [], "reasoning": None, "suggestion": None})
-        data = r.json()
-    except Exception:
-        return ok({"status": "unavailable", "score": None, "issues": [], "reasoning": None, "suggestion": None})
-    return ok({
-        "status": data.get("status"),
-        "score": data.get("score"),
-        "issues": data.get("issues"),
-        "reasoning": data.get("reasoning"),
-        "suggestion": data.get("suggestion"),
-    })
 
 
 @router.post("/items/{item_id}/decision")
@@ -281,8 +334,12 @@ def review_decision(
         operator_id=user.id, operator_type="reviewer", comment=body.comment,
     ))
     db.commit()
+
+    # 自动检查任务是否全部完成
+    _check_task_completion(db, item.task_id)
+
     db.refresh(item)
-    return ok({"task_item": {
+    return ok({"item": {
         "id": item.id,
         "task_id": item.task_id,
         "dataset_item_id": item.dataset_item_id,
@@ -328,8 +385,9 @@ def modify_and_pass(
         operator_id=user.id, operator_type="reviewer", comment=f"修改后通过: {body.comment}",
     ))
     db.commit()
+    _check_task_completion(db, item.task_id)
     db.refresh(item)
-    return ok({"task_item": {
+    return ok({"item": {
         "id": item.id, "task_id": item.task_id, "dataset_item_id": item.dataset_item_id,
         "index": item.index, "status": item.status,
     }})

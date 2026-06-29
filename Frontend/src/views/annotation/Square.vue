@@ -82,14 +82,13 @@ function enterTask(task: Task) {
   if (activeTab.value === 'available') {
     claim(task)
   } else if (task.my_items && task.my_items.length > 0) {
-    // 找第一个非完成状态的标注项
     const active = task.my_items.find(i => i.status === 'annotating' || i.status === 'submitted' || i.status === 'reviewed')
-    router.push(`/workbench/${(active || task.my_items[0]).id}`)
+    router.push(`/workbench/${(active || task.my_items[0]).id}?from=${activeTab.value}`)
   }
 }
 
 function gotoItem(itemId: number) {
-  router.push(`/workbench/${itemId}`)
+  router.push(`/workbench/${itemId}?from=${activeTab.value}`)
 }
 
 function toggleSelect(task: Task) {
@@ -241,9 +240,8 @@ onMounted(load)
                 <StatusTag status="annotating" v-else-if="activeTab === 'mine_active'" />
                 <StatusTag status="approved" v-else-if="activeTab === 'mine_done'" />
               </div>
-              </div>
-
-              <div class="tc-desc">{{ t.description || '无描述' }}</div>
+            </div>
+            <div class="tc-desc">{{ t.description || '无描述' }}</div>
               <div class="tc-meta">
                 <span>{{ t.template?.name || '关联模板' }}</span>
                 <span>·</span>

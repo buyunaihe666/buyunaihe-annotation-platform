@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAnnotationItem, saveDraft, submitItem, requestSuggestion, getSuggestion } from '@/api'
@@ -15,6 +15,24 @@ import { MagicStick } from '@element-plus/icons-vue'
 const route = useRoute()
 const router = useRouter()
 const itemId = computed(() => Number(route.params.itemId))
+const fromTab = computed(() => route.query.from as string || '')
+
+// 根据来源 tab 过滤标注项列表
+function filterMyItems(items: any[]): TaskItem[] {
+  const mapFn = (i: any) => ({ id: i.id, status: i.status, index: i.index } as TaskItem)
+  if (fromTab.value === 'mine_active') {
+    return items.filter(i => ['annotating', 'submitted', 'reviewed', 'rejected'].includes(i.status)).map(mapFn)
+  }
+  if (fromTab.value === 'mine_done') {
+    return items.filter(i => ['approved', 'completed'].includes(i.status)).map(mapFn)
+  }
+  return items.map(mapFn)
+}
+
+// 当前项在列表中的位置
+const currentListIndex = computed(() => myItems.value.findIndex(i => i.id === itemId.value))
+const hasNext = computed(() => currentListIndex.value >= 0 && currentListIndex.value < myItems.value.length - 1)
+const hasPrev = computed(() => currentListIndex.value > 0)
 
 const data = ref<AnnotationItemResponse | null>(null)
 const schema = ref<TemplateSchema>({ materials: [] })
@@ -23,8 +41,6 @@ const result = ref<Record<string, any>>({})
 const rendererRef = ref<InstanceType<typeof MaterialRenderer>>()
 const transitions = ref<any[]>([])
 const myItems = ref<TaskItem[]>([])
-const totalMyItems = ref(0)
-const currentIndex = ref(0)
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -34,12 +50,17 @@ const suggestionId = ref<string | null>(null)
 const suggestionStatus = ref<string>('')
 const suggestion = ref<any>(null)
 const suggestionLoading = ref(false)
+const aiReviewJustCompleted = ref(false)
 let pollTimer: any = null
+let statusPollTimer: any = null
 
 async function load() {
+  stopStatusPolling()
+  aiReviewJustCompleted.value = false
   loading.value = true
   try {
     const res = await getAnnotationItem(itemId.value)
+    const prevStatus = data.value?.item?.status
     data.value = res
     schema.value = res.template_schema || { materials: [] }
     rawData.value = res.raw_data || {}
@@ -53,10 +74,36 @@ async function load() {
       }
     }
     suggestion.value = res.suggestion || null
-    myItems.value = (res.my_items || []).map((i: any) => ({ id: i.id, status: i.status, index: i.index } as TaskItem))
-    transitions.value = res.transitions || []
+    myItems.value = filterMyItems(res.my_items || [])
+    if (prevStatus === 'ai_reviewing' && res.item?.status !== 'ai_reviewing') {
+      aiReviewJustCompleted.value = true
+      ElMessage.success('AI 预审已完成')
+    } else if (res.item?.status === 'ai_reviewing') {
+      startStatusPolling()
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function pollStatus() {
+  try {
+    const res = await getAnnotationItem(itemId.value)
+    const prevStatus = data.value?.item?.status
+    if (res.item) {
+      data.value = { ...data.value!, item: res.item } as AnnotationItemResponse
+    }
+    myItems.value = filterMyItems(res.my_items || [])
+    transitions.value = res.transitions || []
+    if (prevStatus === 'ai_reviewing' && res.item?.status !== 'ai_reviewing') {
+      aiReviewJustCompleted.value = true
+      ElMessage.success('AI 预审已完成')
+      stopStatusPolling()
+    } else if (res.item?.status !== 'ai_reviewing') {
+      stopStatusPolling()
+    }
+  } catch {
+    stopStatusPolling()
   }
 }
 
@@ -80,6 +127,11 @@ async function handleSubmit() {
     await submitItem(itemId.value, result.value)
     ElMessage.success('已提交')
     await load()
+    startStatusPolling()
+    // 提交后自动跳转下一项
+    if (hasNext.value) {
+      goToNext()
+    }
   } finally {
     submitting.value = false
   }
@@ -128,6 +180,17 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 }
 
+function startStatusPolling() {
+  stopStatusPolling()
+  statusPollTimer = setInterval(() => {
+    pollStatus()
+  }, 3000)
+}
+
+function stopStatusPolling() {
+  if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null }
+}
+
 async function acceptSuggestion() {
   if (!suggestion.value) return
   const s = typeof suggestion.value === 'string' ? safeParse(suggestion.value) : suggestion.value
@@ -142,11 +205,22 @@ async function acceptSuggestion() {
 function safeParse(s: string) { try { return JSON.parse(s) } catch { return null } }
 
 function navigateToItem(id: number) {
-  router.push(`/workbench/${id}`)
+  router.push(`/workbench/${id}?from=${fromTab.value}`)
 }
 
-onMounted(load)
-onUnmounted(stopPolling)
+function goToNext() {
+  if (hasNext.value) navigateToItem(myItems.value[currentListIndex.value + 1].id)
+}
+
+function goToPrev() {
+  if (hasPrev.value) navigateToItem(myItems.value[currentListIndex.value - 1].id)
+}
+
+watch(itemId, load, { immediate: true })
+onUnmounted(() => {
+  stopPolling()
+  stopStatusPolling()
+})
 </script>
 
 <template>
@@ -218,10 +292,13 @@ onUnmounted(stopPolling)
             </div>
 
             <div class="form-actions">
+              <el-button @click="goToPrev" :disabled="!hasPrev">上一项</el-button>
               <el-button :loading="drafting" @click="handleDraft">保存草稿</el-button>
-              <el-button type="primary" :loading="submitting" @click="handleSubmit">提交</el-button>
+              <el-button type="primary" :loading="submitting" @click="handleSubmit">提交并下一项</el-button>
+              <el-button @click="goToNext" :disabled="!hasNext">下一项</el-button>
             </div>
-            <el-alert v-if="taskItem?.status === 'ai_reviewing'" title="已提交 AI 预审中" type="warning" :closable="false" style="margin-top:12px" />
+            <el-alert v-if="taskItem?.status === 'ai_reviewing'" title="AI 预审中" type="warning" :closable="false" style="margin-top:12px" />
+<el-alert v-if="aiReviewJustCompleted" title="AI 预审已完成" type="success" :closable="false" style="margin-top:12px" />
           </div>
         </div>
       </div>

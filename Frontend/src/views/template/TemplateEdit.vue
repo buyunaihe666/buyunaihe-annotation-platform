@@ -54,7 +54,7 @@ function initProps(type: MaterialType): Record<string, any> {
 
 // Ensure props/options are initialized when type changes
 watch(() => selected.value?.type, (newType, oldType) => {
-  if (!selected.value || newType === oldType) return
+  if (!selected.value || !newType || newType === oldType) return
   const m = selected.value
   // Reset options for choice types
   if (['radio', 'checkbox', 'select'].includes(newType)) {

@@ -250,7 +250,7 @@ def download_export(export_id: int, db: Session = Depends(get_db), _user: User =
     if f is None:
         raise HTTPException(status_code=404, detail={"code": 404, "message": "no file", "data": None})
 
-    # 本地文件系统：直接返回文件流
+    # 直接读取文件内容返回，避免重定向导致的跨域/认证问题
     local_path = local_file_path(f.minio_object)
     if local_path:
         return FileResponse(
@@ -260,8 +260,13 @@ def download_export(export_id: int, db: Session = Depends(get_db), _user: User =
             headers={"Content-Disposition": f'attachment; filename="{f.filename}"'},
         )
 
-    # MinIO 或外部 URL：重定向
-    return RedirectResponse(url=f.url or public_url("export", f.minio_object))
+    # MinIO: 读取字节流直接返回
+    content = download_bytes("export", f.minio_object)
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{f.filename}"'},
+    )
 
 
 @router.get("/{export_id}/content")

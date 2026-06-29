@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getReviewItem, getReviewAiReport, submitDecision, submitModifyAndPass } from '@/api'
+import { getReviewItem, getReviewAiReport, submitDecision, submitModifyAndPass, listReviewItems } from '@/api'
 import type { ReviewItemResponse, AiReport, TemplateSchema, TaskItem, TaskTransition } from '@/types'
 import MaterialView from '@/components/MaterialView.vue'
+import MaterialRenderer from '@/components/MaterialRenderer.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -22,12 +23,19 @@ const result = ref<Record<string, any> | null>(null)
 const aiReport = ref<AiReport | null>(null)
 const transitions = ref<TaskTransition[]>([])
 const aiLoading = ref(false)
+const reviewItems = ref<TaskItem[]>([])
+
+// 当前项在列表中的位置
+const currentListIndex = computed(() => reviewItems.value.findIndex(i => i.id === itemId.value))
+const hasNext = computed(() => currentListIndex.value >= 0 && currentListIndex.value < reviewItems.value.length - 1)
+const hasPrev = computed(() => currentListIndex.value > 0)
 
 const decision = ref<'approved' | 'rejected' | 'modify_approve'>('approved')
 const comment = ref('')
 const deciding = ref(false)
 const modifyMode = ref(false)
 const editableResult = ref<Record<string, any>>({})
+const rendererRef = ref<InstanceType<typeof MaterialRenderer>>()
 let pollTimer: any = null
 
 async function load() {
@@ -42,6 +50,35 @@ async function load() {
   if (!aiReport.value || aiReport.value.status === 'processing' || aiReport.value.status === 'pending') {
     pollAiReport()
   }
+  if (data.value?.item?.task_id) {
+    await loadReviewItems(data.value.item.task_id)
+  }
+}
+
+async function loadReviewItems(taskId: number) {
+  try {
+    const res = await listReviewItems(taskId, { page: 1, size: 100 })
+    reviewItems.value = res.items.map((item: any) => ({
+      id: item.id,
+      index: item.index,
+      status: item.status,
+      task_id: item.task_id,
+    }))
+  } catch {
+    reviewItems.value = []
+  }
+}
+
+function navigateToItem(itemId: number) {
+  router.push(`/review/workbench/${itemId}`)
+}
+
+function goToNext() {
+  if (hasNext.value) navigateToItem(reviewItems.value[currentListIndex.value + 1].id)
+}
+
+function goToPrev() {
+  if (hasPrev.value) navigateToItem(reviewItems.value[currentListIndex.value - 1].id)
 }
 
 async function fetchAiReport() {
@@ -91,7 +128,12 @@ async function submitReview() {
       await submitDecision(itemId.value, decision.value, comment.value)
     }
     ElMessage.success('审核已提交')
-    router.back()
+    // 自动跳转下一项，没有下一项时返回列表
+    if (hasNext.value) {
+      goToNext()
+    } else {
+      router.back()
+    }
   } finally {
     deciding.value = false
   }
@@ -105,7 +147,7 @@ const scoreColor = computed(() => {
   return '#ef4444'
 })
 
-onMounted(() => { load().catch(() => {}) })
+watch(itemId, load, { immediate: true })
 onUnmounted(stopPolling)
 </script>
 
@@ -119,11 +161,17 @@ onUnmounted(stopPolling)
         <div class="panel-header">待审核项</div>
         <div class="panel-body">
           <div class="item-nav-list">
-            <div class="nav-item active">
-              <span class="nav-index">#{{ data?.item?.index ?? '-' }}</span>
-              <StatusTag :status="data?.item?.status || ''" size="small" />
+            <div
+              v-for="item in reviewItems"
+              :key="item.id"
+              class="nav-item"
+              :class="{ active: item.id === itemId }"
+              @click="navigateToItem(item.id)"
+            >
+              <span class="nav-index">#{{ item.index }}</span>
+              <StatusTag :status="item.status" size="small" />
             </div>
-            <EmptyState icon="List" title="待审项" description="使用列表导航" />
+            <EmptyState v-if="!reviewItems.length" icon="List" title="待审项" description="使用列表导航" />
           </div>
         </div>
       </div>
@@ -143,7 +191,8 @@ onUnmounted(stopPolling)
             <StatusTag :status="data?.item?.status || ''" />
           </div>
           <div class="card-body">
-            <MaterialView :schema="schema" :result="modifyMode ? editableResult : result" />
+            <MaterialRenderer v-if="modifyMode" ref="rendererRef" :schema="schema" v-model="editableResult" />
+            <MaterialView v-else :schema="schema" :result="result" />
           </div>
         </div>
 
@@ -166,14 +215,17 @@ onUnmounted(stopPolling)
                   <el-radio value="modify_approve">修改后通过</el-radio>
                 </el-radio-group>
               </el-form-item>
-              <el-form-item v-if="modifyMode" label="修改后的标注结果">
-                <pre class="raw">{{ prettyJson(editableResult) }}</pre>
-                <el-button size="small" type="primary" @click="editableResult = JSON.parse(JSON.stringify(result))" style="margin-top: 8px">重置为原结果</el-button>
+              <el-form-item v-if="modifyMode" label="提示">
+                <el-alert type="warning" :closable="false" show-icon title="修改模式已开启，请在上方标注结果区域直接修改" />
               </el-form-item>
               <el-form-item label="审核意见">
                 <el-input v-model="comment" type="textarea" :rows="2" placeholder="填写审核意见或驳回原因" />
               </el-form-item>
-              <el-button type="primary" :loading="deciding" @click="submitReview">提交审核</el-button>
+              <div class="review-actions">
+                <el-button @click="goToPrev" :disabled="!hasPrev">上一项</el-button>
+                <el-button type="primary" :loading="deciding" @click="submitReview">提交审核并下一项</el-button>
+                <el-button @click="goToNext" :disabled="!hasNext">下一项</el-button>
+              </div>
             </el-form>
           </div>
         </div>
@@ -302,6 +354,12 @@ onUnmounted(stopPolling)
 .card-body {
   padding: 20px;
 }
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
 .item-nav-list {
   display: flex;
   flex-direction: column;
@@ -314,6 +372,12 @@ onUnmounted(stopPolling)
   padding: 12px 14px;
   border: 1px solid var(--lh-border);
   border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.nav-item:hover {
+  border-color: var(--lh-primary);
+  background: rgba(var(--lh-primary-rgb), 0.05);
 }
 .nav-item.active {
   border-color: var(--lh-primary);

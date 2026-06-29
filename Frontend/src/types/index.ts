@@ -106,7 +106,7 @@ export interface Task {
   enable_ai_suggestion: number | boolean
   quota: number
   max_item_count: number
-  deadline?: string
+  deadline?: string | null
   reward_rules?: Record<string, any>
   tags?: string[]
   distribution_type: string
@@ -123,7 +123,6 @@ export interface Task {
   total_count?: number
   my_items?: Array<{ id: number; status: string; index: number; reward?: number }>
   total_reward?: number
-  reward_rules?: Record<string, any>
   created_by?: number
   created_at?: string
   updated_at?: string
@@ -192,6 +191,7 @@ export interface AnnotationItemResponse {
   result: Record<string, any> | null
   suggestion?: any
   transitions?: TaskTransition[]
+  my_items?: Array<{ id: number; status: string; index: number; reward?: number }>
 }
 
 export interface SuggestionState {

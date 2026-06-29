@@ -122,9 +122,9 @@ def square(
 ):
     if tab in ("mine_active", "mine_done"):
         if tab == "mine_active":
-            item_statuses = ["annotating", "submitted", "ai_reviewing", "reviewed"]
+            item_statuses = ["annotating", "submitted", "ai_reviewing", "reviewed", "rejected"]
         else:
-            item_statuses = ["approved", "rejected", "completed"]
+            item_statuses = ["approved", "completed"]
 
         items = db.query(TaskItem).filter(
             TaskItem.assigned_labeler_id == user.id,
@@ -231,11 +231,18 @@ def get_item(item_id: int, db: Session = Depends(get_db), user: User = Depends(g
             if r.status_code == 200:
                 audit_data = r.json()
                 if audit_data.get("status") in ("done", "failed"):
-                    item.status = "reviewed"
-                    _log_transition(db, item.task_id, item_id, "ai_reviewing", "reviewed", 0, "AI audit completed")
+                    item.status = "submitted"
+                    _log_transition(db, item.task_id, item_id, "ai_reviewing", "submitted", 0, "AI audit completed")
                     db.commit()
-        except Exception:
-            pass
+                    print(f"[DEBUG] Auto-transition item {item_id}: ai_reviewing -> reviewed")
+                else:
+                    print(f"[DEBUG] Auto-transition skipped: audit status={audit_data.get('status')}")
+            else:
+                print(f"[DEBUG] Auto-transition failed: HTTP {r.status_code}")
+        except Exception as e:
+            print(f"[DEBUG] Auto-transition exception: {e}")
+    else:
+        print(f"[DEBUG] Auto-transition not triggered: item.status={item.status}, result_row={result_row is not None}, ai_report_id={result_row.ai_report_id if result_row else None}")
     return ok({
         "item": _item_out(item),
         "template_schema": schema_json,
@@ -289,6 +296,8 @@ def submit_item(item_id: int, body: DraftRequest, db: Session = Depends(get_db),
     task = db.query(Task).filter(Task.id == item.task_id).first()
     if task is None:
         raise HTTPException(status_code=404, detail={"code": 404, "message": "task not found", "data": None})
+    if item.status in ("ai_reviewing", "reviewed", "approved", "completed"):
+        raise HTTPException(status_code=400, detail={"code": 400, "message": f"item already {item.status}", "data": None})
 
     result = db.query(AnnotationResult).filter(AnnotationResult.task_item_id == item_id).first()
     if result is None:
@@ -328,8 +337,13 @@ def submit_item(item_id: int, body: DraftRequest, db: Session = Depends(get_db),
             "context": {"task_name": task.name, "dataset_name": None},
         }
         sent = rabbitmq.publish_audit(message)
-        result.status = "submitted"
-        item.status = "ai_reviewing" if sent else "submitted"
+        if sent:
+            result.status = "submitted"
+            item.status = "ai_reviewing"
+        else:
+            result.ai_report_id = None
+            result.status = "submitted"
+            item.status = "submitted"
         db.commit()
         return ok({"result": result.result, "audit_id": audit_id if sent else None, "audit_dispatched": sent})
     else:

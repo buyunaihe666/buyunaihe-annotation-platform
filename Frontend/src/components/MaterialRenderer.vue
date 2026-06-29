@@ -16,10 +16,12 @@ const emit = defineEmits<{
 const formRef = ref<FormInstance>()
 const local = ref<Record<string, any>>({ ...(props.modelValue || {}) })
 const jsonText = reactive<Record<string, string>>({})
+let isSyncing = false
 
 watch(
   () => props.modelValue,
   (v) => {
+    if (isSyncing) { isSyncing = false; return }
     const merged: Record<string, any> = {}
     for (const m of props.schema.materials) {
       merged[m.fieldKey] = (v && v[m.fieldKey] !== undefined) ? v[m.fieldKey] : (local.value[m.fieldKey] ?? defaultFor(m))
@@ -31,7 +33,7 @@ watch(
       }
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 )
 
 function defaultFor(m: any): any {
@@ -68,6 +70,7 @@ const rules = computed<FormRules>(() => {
 })
 
 function sync() {
+  isSyncing = true
   emit('update:modelValue', { ...local.value })
 }
 
